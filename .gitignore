@@ -1,0 +1,8 @@
+node_modules/
+dist/
+playwright-report/
+test-results/
+*.local
+.DS_Store
+tools/tmp/
+.chromium-path.json
