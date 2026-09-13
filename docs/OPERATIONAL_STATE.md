@@ -52,6 +52,22 @@ volume/shake/reduced-motion, decorative props beyond landmark stamps.
 - Browser QA uses an npm-delivered Chromium (`@sparticuz/chromium`) + extracted al2023 libs —
   `tools/ensure-chromium.mjs` records paths; no CDN access required.
 - Preview server: `npm run preview` binds 0.0.0.0:4173, base `/Deeper/`.
+
+## Deployment state (v1.0.1)
+
+- **CI GREEN**: the `ci` workflow passed end-to-end on a fresh GitHub runner for both the
+  release tag and main (typecheck → asset check 339 files → 22 unit/prog-sim → 6 e2e → build).
+  Run evidence: PR #1 and #2 checks, tag runs for v1.0.0/v1.0.1.
+- **GitHub Pages: PENDING one owner click.** The `deploy-pages` workflow is correct and ran,
+  but creating the Pages site (`POST /repos/.../pages`) requires an owner-level credential:
+  both the Arena integration token and the workflow GITHUB_TOKEN (with `pages:write` and
+  `configure-pages enablement:true`) were rejected (403 / Not Found). Until the owner opens
+  **Settings → Pages → Build and deployment → Source: GitHub Actions** (then re-run the
+  `deploy-pages` workflow or push any `v*` tag), the game is **not live** — no live URL is
+  claimed. Everything else about the deploy (build output, base `/Deeper/`, artifact upload)
+  is verified up to the API wall.
+- Releases: [v1.0.0](https://github.com/westkitty/Deeper/releases/tag/v1.0.0) and
+  v1.0.1 (CI-only patch: deploy workflow Pages enablement attempt).
 - Sandbox history note: the working tree survived a sandbox recycle but the local git
   history did not; this tag was cut from the re-committed, fully re-verified tree
   (all suites re-run after restore — the numbers above are post-restore).
