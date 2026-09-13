@@ -4,19 +4,20 @@
  */
 
 import Phaser from "phaser";
-import { CAM_ZOOM, GAME_HEIGHT, GAME_WIDTH } from "../config";
+import { BASE_X, CAM_ZOOM, GAME_HEIGHT, GAME_WIDTH, STRATUM_DEPTHS, STRATA_START } from "../config";
 import { GameSim } from "../sim/game";
 import { stratumAtRow } from "../config";
-import { tool } from "../sim/tools";
+import { TOOLS, tool } from "../sim/tools";
 import { mat } from "../sim/materials";
 import { TerrainRenderer, CELL } from "../render/terrain";
 import { EntityRenderer } from "../render/entities";
 import { loadSheets, sliceAll } from "../render/slices";
 import { AudioEngine } from "../audio";
 import { InputManager } from "../input";
-import { UI } from "../ui/dom";
+import { UI, type SettingsState } from "../ui/dom";
 import { openMap, openWorkshop, openFinale, stratumBanner } from "../ui/menus";
-import { hasSave, loadSaveData, saveGame } from "../sim/save";
+import { hasSave, loadSaveData, saveGame, saveSummary, exportSave, importSave, clearSave } from "../sim/save";
+import { log, installErrorBoundary } from "../log";
 import type { WowKey } from "../sim/wow";
 
 const WOW_BANNERS: Record<WowKey, [string, string, string]> = {
@@ -75,7 +76,17 @@ export class WorldScene extends Phaser.Scene {
   }
 
   create() {
+    installErrorBoundary();
+    this.input2.loadBindings();
+    this.audio.loadMuted();
+    // restore persisted UI prefs
+    try {
+      const s = JSON.parse(localStorage.getItem("deeper.settings") ?? "{}");
+      if (s.highContrast) this.ui.setHighContrast(true);
+      if (typeof s.reducedMotion === "boolean") this.ui.reducedMotion = s.reducedMotion;
+    } catch { /* defaults */ }
     sliceAll(this);
+    log.info("scene", "world create");
     const seedData = this.game.registry.get("pendingSeed") as number | undefined;
     const save = this.game.registry.get("pendingLoad") as boolean | undefined;
     if (seedData !== undefined) {
@@ -123,11 +134,28 @@ export class WorldScene extends Phaser.Scene {
     this.paused = false;
     this.ui.clearMenu();
     this.audio.ensure();
+    // touch devices get on-screen controls
+    if ("ontouchstart" in window || navigator.maxTouchPoints > 0) {
+      this.ui.showTouchControls({
+        onLeft: (v) => (this.input2.touchLeft = v),
+        onRight: (v) => (this.input2.touchRight = v),
+        onJump: (v) => (this.input2.touchJump = v),
+        onDig: (v) => (this.input2.touchDig = v),
+        onUtility: () => {
+          const inp = this.sim.input;
+          this.sim.useUtilityAt(inp.aimX, inp.aimY);
+        },
+        onInteract: () => this.interact(),
+      });
+    }
     if (fresh) {
       this.ui.banner("THE WORKS", "Dig. Fill the hopper. Sell at the works. Go deeper.", 4200);
-      this.ui.toast({ text: "LEFT CLICK to dig · A/D to drive · E at the works to sell" });
+      this.ui.toast({ text: "LEFT CLICK to dig · A/D to drive · E at the works to sell", icon: "info" });
     } else {
-      this.ui.toast({ text: "Welcome back. The world is how you left it." });
+      this.ui.toast({ text: "Welcome back. The world is how you left it.", icon: "info" });
+      if (this.sim.deathCaches.length > 0) {
+        this.ui.toast({ text: `${this.sim.deathCaches.length} death cache(s) await recovery — purple on the map.`, color: "#b070e8" });
+      }
     }
   }
 
@@ -186,6 +214,8 @@ export class WorldScene extends Phaser.Scene {
       return;
     }
     this.sim.interact();
+    if (t.kind === "valve") this.audio.play("valve", 0.9);
+    if (t.kind === "lift") this.audio.play("lift", 0.7);
     if (t.kind === "core") {
       // finale handled via wow event
     }
@@ -205,6 +235,11 @@ export class WorldScene extends Phaser.Scene {
           this.game.registry.set("showTitle", true);
           window.location.reload();
         },
+        {
+          cells: this.sim.stats.cellsDestroyed, ore: this.sim.stats.oreExtracted,
+          money: this.sim.stats.moneyEarned, playtime: this.sim.playtime,
+          depth: Math.max(0, Math.floor(this.sim.rig.y) - 8),
+        },
       );
     } else {
       this.ui.clearMenu();
@@ -213,16 +248,23 @@ export class WorldScene extends Phaser.Scene {
 
   private openSettings(from: string) {
     this.settingsOpen = true;
+    const cur: SettingsState = {
+      master: this.audio.vol.master, sfx: this.audio.vol.sfx, ambient: this.audio.vol.ambient,
+      shake: this.audio.shake, reducedMotion: this.audio.reducedMotion,
+      assistMode: this.sim.rig.assistMode,
+      highContrast: document.body.classList.contains("high-contrast"),
+    };
     this.ui.showSettings(
-      {
-        master: this.audio.vol.master, sfx: this.audio.vol.sfx, ambient: this.audio.vol.ambient,
-        shake: this.audio.shake, reducedMotion: this.audio.reducedMotion,
-      },
+      cur,
       (s) => {
         this.audio.setVolumes(s);
         this.audio.shake = s.shake;
         this.audio.reducedMotion = s.reducedMotion;
+        this.ui.reducedMotion = s.reducedMotion;
         this.entities.reducedMotion = s.reducedMotion;
+        this.sim.rig.assistMode = s.assistMode;
+        if (s.assistMode) this.sim.rig.hp = Math.min(this.sim.rig.effectiveMaxHp(), this.sim.rig.hp + 50);
+        this.ui.setHighContrast(s.highContrast);
         localStorage.setItem("deeper.settings", JSON.stringify(s));
       },
       () => {
@@ -232,14 +274,39 @@ export class WorldScene extends Phaser.Scene {
           this.showTitle();
         }
       },
+      {
+        bindings: { ...this.input2.bindings } as unknown as Record<string, string[]>,
+        onResetBindings: () => {
+          this.input2.resetBindings();
+          this.ui.toast({ text: "Bindings reset to defaults.", icon: "info" });
+        },
+        onExportSave: () => {
+          saveGame(this.sim);
+          const json = exportSave();
+          if (json) {
+            const blob = new Blob([json], { type: "application/json" });
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = `deeper-save-${this.sim.seed}.json`;
+            a.click();
+            URL.revokeObjectURL(a.href);
+          }
+        },
+        onImportSave: (json: string) => importSave(json),
+        onResetSave: () => {
+          clearSave();
+          this.ui.toast({ text: "Save deleted. Reloading to title.", color: "#e05838" });
+          window.setTimeout(() => window.location.reload(), 900);
+        },
+      },
     );
   }
 
   private showTitle() {
     this.paused = true;
     this.ui.showTitle(
-      () => {
-        const seed = (Date.now() ^ (Math.random() * 0xffffffff)) >>> 0;
+      (seedOpt?: number) => {
+        const seed = seedOpt ?? ((Date.now() ^ (Math.random() * 0xffffffff)) >>> 0);
         this.scene.restart();
         this.game.registry.set("pendingSeed", seed);
         this.game.registry.set("autostart", true);
@@ -252,6 +319,7 @@ export class WorldScene extends Phaser.Scene {
       () => this.openSettings("title"),
       () => this.ui.showCredits(() => this.showTitle()),
       hasSave(),
+      hasSave() ? saveSummary() : null,
     );
   }
 
@@ -362,12 +430,12 @@ export class WorldScene extends Phaser.Scene {
         }
         case "sell": {
           this.audio.play("sell");
-          this.ui.toast({ text: `Sold cargo: +¤${e.money.toLocaleString()}`, color: "#d8a83c" });
+          this.ui.toast({ text: `Sold cargo: +¤${e.money.toLocaleString()}`, color: "#d8a83c", icon: "money" });
           break;
         }
         case "cargoFull": {
           this.audio.play("cargo_full", 0.6);
-          this.ui.toast({ text: "CARGO FULL — sell at the works (E at base)", color: "#e05838" });
+          this.ui.toast({ text: "CARGO FULL — sell at the works (E at base)", color: "#e05838", icon: "cargo" });
           break;
         }
         case "pickup": break;
@@ -393,13 +461,13 @@ export class WorldScene extends Phaser.Scene {
           break;
         }
         case "blueprint": {
-          this.audio.play("big_loot");
+          this.audio.play("blueprint");
           this.ui.banner("BLUEPRINT RECOVERED", e.key.toUpperCase(), 3600);
           break;
         }
         case "relic": {
-          this.audio.play("discovery", 0.9);
-          this.ui.toast({ text: "Relic recovered — displayed at the museum", color: "#b070e8" });
+          this.audio.play("relic", 0.9);
+          this.ui.toast({ text: "Relic recovered — displayed at the museum", color: "#b070e8", icon: "loot" });
           break;
         }
         case "geode": {
@@ -412,7 +480,8 @@ export class WorldScene extends Phaser.Scene {
           break;
         }
         case "liftUnlocked": {
-          this.ui.toast({ text: `Lift landing unlocked: ${e.stop}`, color: "#d8a83c" });
+          this.audio.play("lift", 0.8);
+          this.ui.toast({ text: `Lift landing unlocked: ${e.stop}`, color: "#d8a83c", icon: "map" });
           break;
         }
         case "baseStage": {
@@ -486,6 +555,7 @@ export class WorldScene extends Phaser.Scene {
 
     if (!menuBlocking) {
       // input → sim
+      this.input2.pollGamepad();
       const cam = this.cameras.main;
       this.pointerWorld.set(
         cam.scrollX + this.input2.pointerX,
@@ -496,17 +566,49 @@ export class WorldScene extends Phaser.Scene {
       inp.right = this.input2.right;
       inp.jump = this.input2.jump;
       inp.winch = this.input2.up || this.input2.jump;
-      inp.dig = this.input2.digHeld;
+      inp.dig = this.input2.digActive;
       inp.aimX = this.pointerWorld.x / CELL;
       inp.aimY = this.pointerWorld.y / CELL;
       // utility on press edge
       if (this.input2.utilityPressed && !this.utilPrev) {
         this.sim.useUtilityAt(inp.aimX, inp.aimY);
+        const td = tool(this.sim.rig.toolTier);
+        if (td.utility === "scan") this.audio.play("scan", 0.7);
       }
       this.utilPrev = this.input2.utilityPressed;
 
       this.sim.step(dt);
+      const stNow = stratumAtRow(Math.floor(this.sim.rig.y));
       this.audio.setDepthTint(Math.min(1, this.sim.rig.y / 800));
+      this.audio.setStratum(stNow);
+      // tutorial hints → toasts
+      if (this.sim.pendingHint) {
+        const h = this.sim.pendingHint;
+        this.sim.pendingHint = null;
+        this.ui.toast({ text: h.text, color: "#48c8b0", icon: "info" });
+      }
+      // threat radar: audio warning when a threat closes in
+      this.radarTimer -= dt;
+      if (this.radarTimer <= 0) {
+        this.radarTimer = 3;
+        const near = this.sim.threats.nearest(this.sim.rig.x, this.sim.rig.y, 10);
+        if (near && near.elite) this.audio.play("threat_warn", 0.5);
+        else if (near) this.audio.play("threat_warn", 0.25, 1.2);
+      }
+      // scan ring VFX on new pings
+      if (this.sim.stats.scansPulsed !== this.lastScanCount) {
+        this.lastScanCount = this.sim.stats.scansPulsed;
+        const s = this.sim.lastScan;
+        if (s) this.entities.spawnScanRing(s.x * CELL, s.y * CELL);
+      }
+      // heal sparkle while base aura regenerates
+      this.healTimer -= dt;
+      if (this.healTimer <= 0) {
+        this.healTimer = 1.2;
+        if (this.sim.base.auraRate() > 0 && Math.abs(this.sim.rig.x - BASE_X) < 10) {
+          this.entities.spawnHeal(this.sim.rig.x * CELL, this.sim.rig.y * CELL);
+        }
+      }
       // dig loop audio
       const loopKey = `tool_${tool(this.sim.rig.toolTier).key}`;
       if (inp.dig && this.sim.rig.lastDugCell.x >= 0) {
@@ -557,7 +659,16 @@ export class WorldScene extends Phaser.Scene {
       let hazard = "";
       if (st === "redfault" && f.heatProt < 1) hazard = "⚠ HEAT — coolant required";
       if (st === "drownedfault" && rig.y > 340 && f.pressureProt < 1) hazard = "⚠ PRESSURE — hull required";
-      if (rig.hp < 30) hazard = "⚠ RIG INTEGRITY LOW";
+      if (rig.hp < rig.effectiveMaxHp() * 0.3) hazard = "⚠ RIG INTEGRITY LOW";
+      if (this.sim.liftChannel) hazard = `◈ LIFT CHANNEL ${Math.round(this.sim.liftChannelProgress * 100)}% — hold still`;
+      // depth progress to next stratum
+      const row = Math.floor(rig.y);
+      const order = STRATUM_DEPTHS;
+      const idx = order.findIndex((s) => s.id === st);
+      const next = order[idx + 1];
+      const cur0 = order[idx]?.startRow ?? 0;
+      const next0 = next?.startRow ?? STRATA_START.bedrock;
+      const depthProgress = next ? Math.min(1, Math.max(0, (row - cur0) / Math.max(1, next0 - cur0))) : 1;
       this.ui.hudUpdate({
         money: rig.money,
         cargoUsed: rig.cargoUsed(f.cargoBulkMul),
@@ -567,24 +678,33 @@ export class WorldScene extends Phaser.Scene {
         tool: tool(rig.toolTier).name,
         toolTier: rig.toolTier,
         hp: rig.hp,
-        maxHp: rig.maxHp,
+        maxHp: rig.effectiveMaxHp(),
         hazard,
         markers: this.sim.blocked.sites.size,
         vulnerable: [...this.sim.blocked.sites.values()].filter((s) => s.vulnerable).length,
         charges: rig.charges,
+        ownedTools: rig.ownedTools,
+        depthProgress,
+        nextStratum: next?.label,
+        liftProgress: this.sim.liftChannelProgress,
+        combo: this.sim.resonanceCombo,
+        streak: rig.magnetStreak,
+        toolNames: TOOLS.map((t) => t.name),
       });
     }
 
     // ---- diagnostics
     if (this.diagOn) {
-      this.ui.setDiag(this.ui.diagText(
-        this.fps,
-        this.sim.world.activeChunks.size,
-        this.entities["particles"].length,
-        this.sim.env.countLiquid(),
-        this.sim.env.countGas(),
-        0,
-      ));
+      this.ui.setDiag(this.ui.diagText2({
+        fps: this.fps, tick: this.sim.tick, x: this.sim.rig.x, y: this.sim.rig.y,
+        chunks: this.sim.world.activeChunks.size, dirty: this.sim.world.dirtyChunks.size,
+        particles: this.entities["particles"].length,
+        liquid: this.sim.env.countLiquid(), gas: this.sim.env.countGas(),
+        threats: this.sim.threats.threats.length, loot: this.sim.loot.loot.length,
+        envMs: this.sim.env.metrics.lastMs, envOver: this.sim.env.metrics.overBudgetTicks,
+        cellsSet: this.sim.world.metrics.cellsSet, coalesced: this.sim.world.metrics.batchCoalesced,
+        events: this.sim.bus.eventCounts(),
+      }));
     }
 
     // ---- autosave
@@ -596,6 +716,9 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private utilPrev = false;
+  private radarTimer = 0;
+  private lastScanCount = 0;
+  private healTimer = 0;
   private hudElement = document.getElementById("hud") as HTMLElement;
 
   private makeQAHook() {

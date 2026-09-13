@@ -66,6 +66,12 @@ export interface Threat {
   aggro: boolean;
   cooldown: number;
   burrowCooldown: number;
+  /** Elite variant: 2.2x HP, 1.4x damage, 3x drops. */
+  elite: boolean;
+  /** Telegraph timer: >0 means a lunge is winding up (renderer flashes). */
+  telegraph: number;
+  /** Grubbles flee when weak; stalkers commit. */
+  fleeing: boolean;
 }
 
 export class ThreatSim {
@@ -83,15 +89,30 @@ export class ThreatSim {
     this.rng = new RNG(0x7ea7 + world.seed);
   }
 
-  spawn(family: string, x: number, y: number) {
+  spawn(family: string, x: number, y: number, forceElite = false) {
     const f = THREAT_FAMILIES[family];
     if (!f) return;
+    const elite = forceElite || this.rng.chance(0.08);
     const t: Threat = {
       id: this.nextId++, family, x, y, vx: 0, vy: 0,
-      hp: f.hp, maxHp: f.hp, hurtFlash: 0, aggro: false, cooldown: 0, burrowCooldown: 0,
+      hp: elite ? Math.round(f.hp * 2.2) : f.hp,
+      maxHp: elite ? Math.round(f.hp * 2.2) : f.hp,
+      hurtFlash: 0, aggro: false, cooldown: 0, burrowCooldown: 0,
+      elite, telegraph: 0, fleeing: false,
     };
     this.threats.push(t);
     return t;
+  }
+
+  /** Nearest threat within radius (for radar ping + audio warning). */
+  nearest(x: number, y: number, radius: number): Threat | null {
+    let best: Threat | null = null;
+    let bd = radius;
+    for (const t of this.threats) {
+      const d = Math.hypot(t.x - x, t.y - y);
+      if (d < bd) { bd = d; best = t; }
+    }
+    return best;
   }
 
   /** Ambient spawning near the rig in dangerous strata. */
@@ -122,10 +143,23 @@ export class ThreatSim {
       const f = THREAT_FAMILIES[t.family];
       t.hurtFlash = Math.max(0, t.hurtFlash - dt * 4);
       t.cooldown -= dt;
+      t.telegraph = Math.max(0, t.telegraph - dt);
       const dx = rig.x - t.x;
       const dy = rig.y - t.y;
       const dist = Math.hypot(dx, dy);
       t.aggro = dist < 15;
+      // grubbles flee at low HP (cowardly burrowers); others fight on
+      t.fleeing = t.family === "grubble" && t.hp < t.maxHp * 0.3 && !t.elite;
+      if (t.fleeing) {
+        t.vx += -Math.sign(dx || 1) * f.speed * 2.4 * dt;
+        t.vx = Math.max(-f.speed, Math.min(f.speed, t.vx));
+        this.moveThreat(t, f, dt, true);
+        if (t.hp <= 0) {
+          this.threats.splice(i, 1);
+          this.bus.emit({ type: "threatDeath", id: t.id, x: t.x, y: t.y, family: t.family, elite: t.elite });
+        }
+        continue;
+      }
 
       switch (f.behavior) {
         case "walker": {
@@ -192,16 +226,27 @@ export class ThreatSim {
         }
       }
 
+      // telegraphed lunge: wind up at mid range, then commit
+      if (t.aggro && dist > 2.2 && dist < 7 && t.cooldown <= 0 && t.telegraph <= 0 &&
+          (f.behavior === "jumper" || f.behavior === "walker")) {
+        t.telegraph = 0.45;
+      }
+      if (t.telegraph > 0 && t.telegraph <= dt * 1.5) {
+        // commit: dash toward the rig
+        t.vx = Math.sign(dx || 1) * f.speed * 2.6;
+        t.vy = Math.min(t.vy, -4);
+        t.cooldown = 1.4;
+      }
       // contact damage
       if (dist < 1.9 && t.cooldown <= 0) {
-        rig.hurt(f.damage, "threat");
+        rig.hurt(Math.round(f.damage * (t.elite ? 1.4 : 1)), "threat");
         t.cooldown = 1.1;
         t.vx -= Math.sign(dx) * 3;
       }
 
       if (t.hp <= 0) {
         this.threats.splice(i, 1);
-        this.bus.emit({ type: "threatDeath", id: t.id, x: t.x, y: t.y, family: t.family });
+        this.bus.emit({ type: "threatDeath", id: t.id, x: t.x, y: t.y, family: t.family, elite: t.elite });
       }
     }
   }
@@ -239,8 +284,9 @@ export class ThreatSim {
   dropsFor(t: Threat): { res: string; amount: number }[] {
     const f = THREAT_FAMILIES[t.family];
     const out: { res: string; amount: number }[] = [];
+    const mul = (t as Threat).elite ? 3 : 1;
     for (const d of f.drops) {
-      const n = d.min + this.rng.int(0, d.max - d.min + 1);
+      const n = (d.min + this.rng.int(0, d.max - d.min + 1)) * mul;
       if (n > 0 && RESOURCES[d.res]) out.push({ res: d.res, amount: n });
     }
     return out;

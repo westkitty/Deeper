@@ -3,6 +3,17 @@
  * Pointer aim is converted to world cells by the scene.
  */
 
+export interface KeyBindings {
+  left: string[]; right: string[]; jump: string[]; down: string[];
+  interact: string[]; map: string[]; pause: string[]; diag: string[];
+}
+
+const DEFAULT_BINDINGS: KeyBindings = {
+  left: ["a", "arrowleft"], right: ["d", "arrowright"], jump: [" "],
+  down: ["s", "arrowdown"], interact: ["e"], map: ["m", "tab"],
+  pause: ["escape"], diag: ["f3"],
+};
+
 export class InputManager {
   keys = new Set<string>();
   digHeld = false;
@@ -13,6 +24,18 @@ export class InputManager {
   /** Consumable edge presses. */
   private pressed: string[] = [];
   enabled = true;
+  /** Remappable bindings (persisted to localStorage by the scene). */
+  bindings: KeyBindings = structuredClone(DEFAULT_BINDINGS);
+  /** Gamepad state (polled). */
+  gamepadEnabled = true;
+  private gamepadDig = false;
+  private gamepadUtil = false;
+  private lastEdge = new Map<string, number>();
+  /** Touch controls state (set by on-screen buttons). */
+  touchLeft = false;
+  touchRight = false;
+  touchJump = false;
+  touchDig = false;
   /** Set false while DOM menus own the keyboard. */
   private handlers: ((k: string) => void)[] = [];
 
@@ -87,25 +110,81 @@ export class InputManager {
     this.pressed.length = 0;
   }
 
+  /** Poll gamepad (call once per frame): sticks drive, RT digs, LB utility. */
+  pollGamepad() {
+    if (!this.gamepadEnabled) return;
+    try {
+      const pads = navigator.getGamepads?.() ?? [];
+      const gp = [...pads].find((p) => p?.connected);
+      if (!gp) { this.gamepadDig = false; this.gamepadUtil = false; return; }
+      const ax = gp.axes[0] ?? 0;
+      if (ax < -0.35) this.keys.add("__pad_left");
+      else this.keys.delete("__pad_left");
+      if (ax > 0.35) this.keys.add("__pad_right");
+      else this.keys.delete("__pad_right");
+      if (gp.buttons[0]?.pressed) this.keys.add("__pad_jump");
+      else this.keys.delete("__pad_jump");
+      this.gamepadDig = !!(gp.buttons[7]?.pressed || gp.buttons[5]?.pressed);
+      this.gamepadUtil = !!gp.buttons[4]?.pressed;
+      // right stick aims: nudge pointer toward stick direction
+      const rx = gp.axes[2] ?? 0;
+      const ry = gp.axes[3] ?? 0;
+      if (Math.hypot(rx, ry) > 0.4) {
+        this.pointerX = Math.max(0, Math.min(innerWidth, this.pointerX + rx * 14));
+        this.pointerY = Math.max(0, Math.min(innerHeight, this.pointerY + ry * 14));
+      }
+    } catch { /* gamepad unavailable */ }
+  }
+
+  /** Edge-debounced press check (ms): ignores key-repeat ghosts. */
+  edgeDebounced(k: string, ms = 120): boolean {
+    const now = performance.now();
+    const last = this.lastEdge.get(k) ?? -1e9;
+    if (now - last < ms) return false;
+    this.lastEdge.set(k, now);
+    return this.wasPressed(k);
+  }
+
+  remap(action: keyof KeyBindings, keys: string[]) {
+    this.bindings[action] = keys.map((k) => k.toLowerCase());
+    try { localStorage.setItem("deeper.bindings", JSON.stringify(this.bindings)); } catch { /* ignore */ }
+  }
+  loadBindings() {
+    try {
+      const raw = localStorage.getItem("deeper.bindings");
+      if (raw) this.bindings = { ...structuredClone(DEFAULT_BINDINGS), ...JSON.parse(raw) };
+    } catch { /* defaults */ }
+  }
+  resetBindings() {
+    this.bindings = structuredClone(DEFAULT_BINDINGS);
+    try { localStorage.removeItem("deeper.bindings"); } catch { /* ignore */ }
+  }
+
+  private hasAny(list: string[]): boolean {
+    return list.some((k) => this.keys.has(k));
+  }
   /** Movement helpers. */
   get left(): boolean {
-    return this.keys.has("a") || this.keys.has("arrowleft");
+    return this.hasAny(this.bindings.left) || this.keys.has("__pad_left") || this.touchLeft;
   }
   get right(): boolean {
-    return this.keys.has("d") || this.keys.has("arrowright");
+    return this.hasAny(this.bindings.right) || this.keys.has("__pad_right") || this.touchRight;
   }
   get jump(): boolean {
-    return this.keys.has(" ");
+    return this.hasAny(this.bindings.jump) || this.keys.has("__pad_jump") || this.touchJump;
   }
   get down(): boolean {
-    return this.keys.has("s") || this.keys.has("arrowdown");
+    return this.hasAny(this.bindings.down);
   }
   get up(): boolean {
     return this.keys.has("w") || this.keys.has("arrowup");
   }
+  get digActive(): boolean {
+    return this.digHeld || this.gamepadDig || this.touchDig;
+  }
   /** Utility trigger edge. */
   get utilityPressed(): boolean {
-    return this.utilityHeld;
+    return this.utilityHeld || this.gamepadUtil;
   }
 
   detach() {

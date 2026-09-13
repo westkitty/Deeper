@@ -105,3 +105,48 @@ export const CONTROLS = [
   { keys: "F3", action: "Developer diagnostics" },
   { keys: "ESC", action: "Pause" },
 ] as const;
+
+/**
+ * Central balance table (iteration 1).
+ * All gameplay tuning knobs live here so balance passes touch one file.
+ * Exported for the workshop UI, diagnostics overlay, and unit tests.
+ */
+export const BALANCE = {
+  version: 2,
+  sellBulkBonusThreshold: 50,
+  sellBulkBonusMul: 1.1,
+  cartographerBonusPer5: 0.01,
+  cartographerBonusCap: 0.15,
+  magnetStreakWindow: 2.0,
+  magnetStreakVacuumBonus: 1.5,
+  resonanceComboWindow: 4.0,
+  resonanceComboCap: 5,
+  eliteHpMul: 2.2,
+  eliteDmgMul: 1.4,
+  eliteDropMul: 3,
+  eliteChance: 0.08,
+  deathCargoDropFrac: 0.25,
+  liftChannelSeconds: 2.0,
+  waterPushForce: 14,
+  magmaPreheatSoftening: 0.1,
+  assistHpMul: 2,
+  assistThreatDmgMul: 0.5,
+  chargePreviewRadius: 3.4,
+  scanPersistSeconds: 25,
+  tutorialCooldown: 6,
+} as const;
+
+/** Stratum depth table for HUD progress + map ruler (authoritative). */
+export const STRATUM_DEPTHS: { id: StratumId; startRow: number; label: string }[] = [
+  { id: "surface", startRow: 0, label: "SURFACE" },
+  { id: "rootbed", startRow: STRATA_START.rootbed, label: "ROOTBED" },
+  { id: "oldworks", startRow: STRATA_START.oldworks, label: "OLD WORKS" },
+  { id: "buriedmile", startRow: STRATA_START.buriedmile, label: "BURIED MILE" },
+  { id: "drownedfault", startRow: STRATA_START.drownedfault, label: "DROWNED FAULT" },
+  { id: "redfault", startRow: STRATA_START.redfault, label: "RED FAULT" },
+  { id: "glasschoir", startRow: STRATA_START.glasschoir, label: "GLASS CHOIR" },
+  { id: "enginedeep", startRow: STRATA_START.enginedeep, label: "ENGINE DEEP" },
+];
+
+/** Save format version (v2 adds checksum + backup + new progression fields). */
+export const SAVE_VERSION = 2;

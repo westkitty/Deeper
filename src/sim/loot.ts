@@ -104,8 +104,28 @@ export class LootSim {
     }
   }
 
+  /** Rare cache maps: point at the nearest undiscovered landmark (consumed on pickup). */
+  cacheMaps: { x: number; y: number; targetX: number; targetY: number }[] = [];
+
+  dropCacheMap(x: number, y: number, landmarks: { x: number; y: number; w: number; h: number; discovered: boolean }[]) {
+    let best: { x: number; y: number; w: number; h: number } | null = null;
+    let bd = 1e9;
+    for (const l of landmarks) {
+      if (l.discovered) continue;
+      const d = Math.hypot(l.x - x, l.y - y);
+      if (d < bd) { bd = d; best = l; }
+    }
+    if (!best) return;
+    this.cacheMaps.push({ x, y, targetX: (best as { x: number }).x, targetY: (best as { y: number }).y });
+  }
+
   dropRare(st: StratumId, x: number, y: number) {
     const roll = this.rng.next();
+    if (roll < 0.12) {
+      // cache map: rare navigational find (needs landmark list; GameSim backfills target)
+      this.cacheMaps.push({ x, y, targetX: x, targetY: y + 40 });
+      return;
+    }
     if (roll < 0.4) {
       // relic matching stratum
       const pool = RELICS.filter((r) => RELIC_STRATUM[r.key] === stratumTier(st));

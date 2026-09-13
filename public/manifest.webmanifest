@@ -1,0 +1,15 @@
+{
+  "name": "DEEPER — Everything Eventually Breaks",
+  "short_name": "DEEPER",
+  "description": "A 2D side-view destructive mining / loot / progression game.",
+  "start_url": "/Deeper/",
+  "scope": "/Deeper/",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#0a0a10",
+  "theme_color": "#0a0a10",
+  "icons": [
+    { "src": "assets/favicon.png", "sizes": "16x16", "type": "image/png" },
+    { "src": "assets/logo.png", "sizes": "256x256", "type": "image/png", "purpose": "any" }
+  ]
+}

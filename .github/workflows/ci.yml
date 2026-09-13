@@ -26,11 +26,24 @@ jobs:
       - name: Asset validation (deterministic regeneration, byte diff)
         run: npm run assets -- --check
 
+      - name: Asset stats + size budget
+        run: npm run assets -- --stats
+
       - name: Unit tests + headless full-progression simulation (power-curve gate)
-        run: npx vitest run
+        run: |
+          set -o pipefail
+          npx vitest run --reporter=basic 2>&1 | tee /tmp/vitest.log
+          grep -E "Test Files|Tests " /tmp/vitest.log || true
 
       - name: Build
         run: npm run build
+
+      - name: Bundle size guard (2.0 MB cap)
+        run: |
+          SIZE=$(du -cb dist/assets/*.js | tail -1 | cut -f1)
+          echo "bundle js bytes: $SIZE"
+          if [ "$SIZE" -gt 2097152 ]; then echo "BUNDLE OVER BUDGET"; exit 1; fi
+          gzip -c dist/assets/*.js | wc -c
 
       - name: Browser QA (Playwright, real Chromium via npm binary)
         run: |

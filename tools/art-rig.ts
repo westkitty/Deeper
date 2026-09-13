@@ -20,7 +20,7 @@ const RUST = hex("#8a4a30");
 const TIRE = hex("#2c2c30");
 const LIGHT = hex("#f8e8b0");
 
-/** Main chassis — 80x48, drawn per damage variant (0 pristine, 1 worn, 2 battered). */
+/** Main chassis — 80x48, drawn per damage variant (0 pristine, 1 worn, 2 battered, 3 critical). */
 export function rigChassis(damage: number): Px {
   const p = new Px(80, 48);
   const rnd = mulberry(1000 + damage);
@@ -64,7 +64,27 @@ export function rigChassis(damage: number): Px {
     p.line(33, 20, 33, 24, METAL_L);
     p.rect(16, 30, 3, 3, DARK);
   }
+  if (damage >= 3) {
+    // critical: scorch marks, exposed wiring, cracked glass, spark points
+    p.rect(12, 16, 10, 6, hex("#1a1512", 200));
+    p.rect(50, 28, 8, 4, hex("#1a1512", 200));
+    p.line(17, 9, 24, 12, hex("#e8f4f8")); // cracked cabin glass
+    p.line(24, 9, 19, 12, hex("#e8f4f8"));
+    p.rect(40, 30, 6, 1, hex("#c03828")); // exposed wire
+    p.rect(40, 32, 6, 1, hex("#f8d048"));
+    p.set(14, 18, hex("#f8f0b0")); // spark points
+    p.set(55, 30, hex("#f0a040"));
+  }
   p.outline(hex("#1a130c"));
+  return p;
+}
+
+/** Chassis idle bob frame (engine vibration offset variant). */
+export function rigChassisIdle(): Px {
+  const p = rigChassis(0);
+  // shift lamp glow + exhaust shimmer to suggest idling (1px variants)
+  p.set(8, 18, hex("#fff4c8"));
+  p.set(46, 1, hex("#9aa2ac"));
   return p;
 }
 
@@ -283,5 +303,34 @@ export function chargeSprite(): Px {
   p.rect(1, 1, 6, 2, hex("#e05838"));
   p.rect(3, 3, 2, 2, YELLOW);
   p.outline(hex("#180c08"));
+  return p;
+}
+
+/** Armed charge blink frame (remote-detonate telegraph). */
+export function chargeArmed(): Px {
+  const p = chargeSprite();
+  p.rect(0, 0, 8, 1, hex("#f8f0b0"));
+  p.rect(3, 3, 2, 2, hex("#ffffff"));
+  return p;
+}
+
+/** Charge blast-radius preview ring (utility aim). */
+export function chargePreview(): Px {
+  const p = new Px(112, 112);
+  p.ring(56, 56, 52, hex("#e05838", 120));
+  p.ring(56, 56, 46, hex("#e05838", 70));
+  return p;
+}
+
+/** Overheat glow overlay for thermal-class tools. */
+export function toolOverheat(w = 24, h = 24): Px {
+  const p = new Px(w, h);
+  const rnd = mulberry(4242);
+  for (let i = 0; i < 14; i++) {
+    const x = Math.floor(rnd() * w);
+    const y = Math.floor(rnd() * h);
+    p.set(x, y, hex("#ff7a30", 150));
+    if (rnd() < 0.4) p.set(x, y + 1, hex("#ffc860", 120));
+  }
   return p;
 }

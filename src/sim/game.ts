@@ -31,6 +31,8 @@ export interface ScanResult {
 
 export interface Charge { x: number; y: number; fuse: number }
 
+export interface DeathCache { x: number; y: number; cargo: [string, number][] }
+
 export class GameSim {
   seed: number;
   bus = new EventBus();
@@ -52,6 +54,23 @@ export class GameSim {
   drainOpen = false;
   coreExtracted = false;
   finaleShown = false;
+  // ---- iteration-1 gameplay state ----
+  /** Persisted scan overlays (vein outlines, expiry in seconds). */
+  scanOverlays: { x: number; y: number; tier: number; hits: { res: string; count: number }[]; expiresIn: number }[] = [];
+  /** Resonance combo: consecutive pulses within 4s multiply cascade staging. */
+  resonanceCombo = 0;
+  resonanceComboTimer = 0;
+  /** Corpse-run caches left by emergency extraction (recoverable). */
+  deathCaches: DeathCache[] = [];
+  /** Lift travel channel (seconds remaining; interrupted by damage). */
+  liftChannel: { stop: string; t: number } | null = null;
+  /** Contextual tutorial hints (shown once each, 6s apart). */
+  tutorialShown = new Set<string>();
+  tutorialCooldown = 0;
+  /** Pending tutorial hint for the presentation layer to display. */
+  pendingHint: { id: string; text: string } | null = null;
+  /** Post-game: endless deep motherlodes spawned after finale. */
+  postGameSpawns = 0;
 
   input: RigInput = {
     left: false, right: false, jump: false, dig: false, utility: false, interact: false,
@@ -83,6 +102,15 @@ export class GameSim {
       const cells = this.env.resonancePulse(x, y);
       this.wow.checkResonance(cells);
     };
+    // corpse-run wrapper: dropped cargo becomes a recoverable world cache
+    const baseExtract = this.rig.emergencyExtract.bind(this.rig);
+    this.rig.emergencyExtract = (() => {
+      const out = baseExtract();
+      if (out.dropped.length > 0) {
+        this.deathCaches.push({ x: out.x, y: out.y, cargo: out.dropped });
+      }
+      return out;
+    }) as Rig["emergencyExtract"];
     this.loot = new LootSim(this.world, this.bus);
     this.loot.registerCaches(gen.spawns.filter((s) => s.kind !== "threat" && s.kind !== "lift").map((s) => ({ kind: s.kind as CacheEntity["kind"], x: s.x, y: s.y, data: s.data })));
     this.threats = new ThreatSim(this.world, this.bus);
@@ -105,6 +133,10 @@ export class GameSim {
         case "break": {
           this.loot.onBreak(e.x, e.y, e.mat);
           this.stats.noteBreak();
+          this.stats.noteStratumBreak(stratumAtRow(e.y));
+          if (this.stats.cellsDestroyed === 1) {
+            this.hint("dig", "You broke ground. Hold LEFT CLICK toward the pointer to keep digging.");
+          }
           if (mat(e.mat).drops?.length || this.world.ore[e.x + e.y * this.world.w] > 0) {
             this.stats.noteOre(1);
           }
@@ -149,15 +181,23 @@ export class GameSim {
         }
         case "pickup": {
           this.stats.noteOre(e.amount);
+          this.stats.magnetStreakBest = Math.max(this.stats.magnetStreakBest, this.rig.magnetStreak);
+          this.hint("pickup", "Loot flows to your hopper. Vacuum upgrades pull from further away.");
           break;
         }
         case "sell": {
           this.stats.noteSell(e.money);
+          this.hint("sell", "Cargo sold. Hopper extensions and Stack Compression stretch every trip further.");
+          break;
+        }
+        case "cargoFull": {
+          this.hint("cargo", "Hopper full — sell at the works (E at base) or buy cargo upgrades.");
           break;
         }
         case "blocked": {
           this.blocked.reportBlocked(e.x, e.y, e.mat, e.toolTier);
           if (!this.wow.has("wow02_wall")) this.wow.trigger("wow02_wall");
+          this.hint("blocked", "That wall outclasses your rig. It is marked on the map (M) — come back with better tools.");
           break;
         }
         case "toolBought": {
@@ -186,6 +226,12 @@ export class GameSim {
         }
         case "resonance": {
           this.stats.largestChain = Math.max(this.stats.largestChain, e.cells);
+          // combo: consecutive pulses within the window build a multiplier
+          if (this.resonanceComboTimer > 0) this.resonanceCombo++;
+          else this.resonanceCombo = 1;
+          this.resonanceComboTimer = 4.0;
+          this.stats.resonanceCombos++;
+          this.stats.bestResonanceCombo = Math.max(this.stats.bestResonanceCombo, this.resonanceCombo);
           break;
         }
         case "explode": {
@@ -194,10 +240,28 @@ export class GameSim {
           break;
         }
         case "threatDeath": {
+          this.stats.threatsKilled++;
+          if (e.elite) this.stats.elitesKilled++;
           const pseudo = { family: e.family } as never as Parameters<ThreatSim["dropsFor"]>[0];
           for (const d of this.threats.dropsFor(pseudo)) {
             this.loot.drop(d.res, d.amount, e.x, e.y, 0.7);
           }
+          break;
+        }
+        case "hurt": {
+          // lift channel interrupts on damage
+          if (this.liftChannel) this.liftChannel = null;
+          break;
+        }
+        case "emergencyExtract": {
+          // corpse run: 25% of cargo becomes a recoverable cache at the death site
+          // (rig state captured before reset via lastDugCell-adjacent fallback)
+          break;
+        }
+        case "landmarkRevealed": {
+          this.stats.landmarksFound++;
+          this.economy.landmarksFound = this.stats.landmarksFound;
+          this.hint("landmark", "Landmark discovered. Blueprints hide in places like this — and every 5 landmarks lift sell prices.");
           break;
         }
         default:
@@ -216,24 +280,88 @@ export class GameSim {
     }
   }
 
+  /** Queue a one-time contextual tutorial hint (presentation displays it). */
+  hint(id: string, text: string) {
+    if (this.tutorialShown.has(id)) return;
+    if (this.tutorialCooldown > 0) {
+      // keep the first pending hint; drop overlaps (no spam)
+      if (!this.pendingHint) this.pendingHint = { id, text };
+      return;
+    }
+    this.tutorialShown.add(id);
+    this.tutorialCooldown = 6;
+    this.pendingHint = { id, text };
+  }
+
   private stepTick() {
     this.tick++;
     this.playtime += TICK_DT;
     this.stats.playtime = this.playtime;
     const rig = this.rig;
 
+    // tutorial + combo timers
+    this.tutorialCooldown = Math.max(0, this.tutorialCooldown - TICK_DT);
+    if (this.resonanceComboTimer > 0) {
+      this.resonanceComboTimer -= TICK_DT;
+      if (this.resonanceComboTimer <= 0) this.resonanceCombo = 0;
+    }
+    // scan overlay expiry
+    for (let i = this.scanOverlays.length - 1; i >= 0; i--) {
+      this.scanOverlays[i].expiresIn -= TICK_DT;
+      if (this.scanOverlays[i].expiresIn <= 0) this.scanOverlays.splice(i, 1);
+    }
+
     rig.step(this.input, this.tick);
+
+    // water pressure pushes the rig
+    const [pushX, pushY] = this.env.pressurePush(rig.x, rig.y);
+    if (pushX !== 0 || pushY !== 0) {
+      rig.vx += pushX * TICK_DT;
+      rig.vy += pushY * TICK_DT * 0.5;
+    }
+
+    // base repair aura near the works
+    const aura = this.base.auraRate();
+    if (aura > 0 && Math.abs(rig.x - BASE_X) < 10 && Math.floor(rig.y) < 14) {
+      rig.hp = Math.min(rig.effectiveMaxHp(), rig.hp + aura * TICK_DT);
+    }
     this.world.setActiveAround(rig.x, rig.y, 2);
     this.syncEnvBox();
     this.env.step(this.tick);
     this.wow.tickCascade();
 
-    // loot physics + pickup
+    // loot physics + pickup (magnet-streak vacuum included)
     const f = rig.fx();
-    this.loot.physics(TICK_DT, { x: rig.x, y: rig.y, vacuumRadius: Math.max(f.vacuum, tool(rig.toolTier).vacuum) }, (l) => {
+    this.loot.physics(TICK_DT, { x: rig.x, y: rig.y, vacuumRadius: rig.effectiveVacuum() }, (l) => {
       const taken = rig.pickup(l.res, l.amount);
       return taken > 0;
     });
+
+    // lift travel channel (2s, interrupted by damage via hurt event)
+    if (this.liftChannel) {
+      this.liftChannel.t -= TICK_DT;
+      if (this.liftChannel.t <= 0) {
+        const stop = this.liftChannel.stop;
+        this.liftChannel = null;
+        const sp = this.liftSpawn(stop);
+        if (sp) {
+          rig.x = sp.x;
+          rig.y = sp.y - 1;
+          rig.vx = 0;
+          rig.vy = 0;
+          this.stats.liftsTaken++;
+        }
+      }
+    }
+
+    // post-game: endless deep motherlodes + threat scaling after finale
+    if (this.finaleShown && this.tick % 3600 === 0 && this.postGameSpawns < 40) {
+      const mx = 8 + Math.floor(Math.random() * (WORLD_W - 16));
+      const my = 560 + Math.floor(Math.random() * 280);
+      this.motherlodes.push({ x: mx, y: my });
+      this.threats.spawnCooldown = Math.max(2, this.threats.spawnCooldown - 0.5);
+      this.postGameSpawns++;
+    }
 
     // caches the drill cracked open
     for (const c of this.loot.caches) {
@@ -474,16 +602,36 @@ export class GameSim {
     if (!this.rig.fx().lift || !this.base.liftStops.has(stopKey)) return false;
     const sp = this.liftSpawn(stopKey);
     if (!sp) return false;
-    this.rig.x = sp.x;
-    this.rig.y = sp.y - 1;
-    this.rig.vx = 0;
-    this.rig.vy = 0;
+    // 2s channel (interrupted by damage); campus stage travels instantly
+    if (this.base.campusOnline) {
+      this.rig.x = sp.x;
+      this.rig.y = sp.y - 1;
+      this.rig.vx = 0;
+      this.rig.vy = 0;
+      this.stats.liftsTaken++;
+      return true;
+    }
+    this.liftChannel = { stop: stopKey, t: 2.0 };
     return true;
+  }
+
+  /** True while a lift channel is in progress (HUD shows progress). */
+  get liftChannelProgress(): number {
+    if (!this.liftChannel) return 0;
+    return 1 - this.liftChannel.t / 2.0;
   }
 
   /** Utility action from input — scanner ping / charge / resonance. */
   useUtilityAt(ax: number, ay: number) {
     const td = tool(this.rig.toolTier);
+    // remote detonate: pressing utility again while charges are armed blows the oldest
+    if (td.utility === "charge" && this.charges.length > 0 && this.rig.utilityCooldown > 0.4) {
+      const c = this.charges.shift()!;
+      this.env.explode(c.x, c.y, 3.4, 380);
+      this.threats.damageNear(c.x, c.y, 4.2, 140);
+      this.stats.chargesDetonated++;
+      return;
+    }
     const res = this.rig.useUtility(ax, ay) as { scan?: boolean; charge?: boolean; resonate?: boolean; x: number; y: number };
     if (!res) return;
     if (res.charge) {
@@ -503,6 +651,16 @@ export class GameSim {
       }
     } else if (res.scan) {
       this.lastScan = this.scan(ax, ay);
+      this.stats.scansPulsed++;
+      // tier 3+ vein outlines persist on the map for 25s
+      if (this.lastScan.tier >= 3) {
+        this.scanOverlays.push({
+          x: this.lastScan.x, y: this.lastScan.y, tier: this.lastScan.tier,
+          hits: this.lastScan.hits, expiresIn: 25,
+        });
+        if (this.scanOverlays.length > 6) this.scanOverlays.shift();
+      }
+      this.hint("scan", "Scanner ping reveals nearby ore. Higher tiers outline whole veins and flag anomalies.");
     }
     void td;
   }
@@ -552,7 +710,7 @@ export class GameSim {
 
   serialize(): import("./save").SaveData {
     return {
-      v: 1,
+      v: 2,
       seed: this.seed,
       playtime: this.playtime,
       world: this.serializeWorld(),
@@ -571,6 +729,8 @@ export class GameSim {
       landmarks: this.landmarks.map((l) => ({ key: l.key, x: l.x, discovered: l.discovered })),
       stats: this.serializeStats(),
       drainOpen: this.drainOpen,
+      assistMode: this.rig.assistMode,
+      deathCaches: this.deathCaches.map((d) => ({ x: d.x, y: d.y, cargo: d.cargo })),
     };
   }
 
@@ -584,7 +744,10 @@ export class GameSim {
     this.rig.relics = new Set(r.relics);
     this.rig.upgrades = new Set(r.upgrades);
     this.rig.charges = r.charges ?? 0;
+    this.rig.assistMode = !!data.assistMode;
+    this.deathCaches = (data.deathCaches ?? []).map((d) => ({ x: d.x, y: d.y, cargo: d.cargo }));
     this.economy.lifetimeEarned = data.economy.lifetimeEarned;
+    this.economy.landmarksFound = this.landmarks.filter((l) => l.discovered).length;
     this.base.load(data.base);
     this.blocked.load(data.blocked);
     this.wow.load(data.wow);
@@ -641,6 +804,26 @@ export class GameSim {
       if (Math.hypot(c.x - this.rig.x, c.y - this.rig.y) < 2.2) {
         if (c.kind === "salvage" || c.kind === "valve" || c.kind === "core" || c.kind === "lift") continue;
         this.collectCache(c);
+      }
+    }
+    // corpse-run recovery: touch your death cache to reclaim dropped cargo
+    for (let i = this.deathCaches.length - 1; i >= 0; i--) {
+      const dc = this.deathCaches[i];
+      if (Math.hypot(dc.x - this.rig.x, dc.y - this.rig.y) < 2.6) {
+        for (const [res, amount] of dc.cargo) {
+          this.rig.pickup(res, amount);
+        }
+        this.deathCaches.splice(i, 1);
+        this.stats.deathsRecovered++;
+        this.bus.emit({ type: "pickup", res: "gold", amount: 1, x: dc.x, y: dc.y });
+      }
+    }
+    // cache maps: touch to reveal direction to nearest undiscovered landmark
+    for (let i = this.loot.cacheMaps.length - 1; i >= 0; i--) {
+      const m = this.loot.cacheMaps[i];
+      if (Math.hypot(m.x - this.rig.x, m.y - this.rig.y) < 2.6) {
+        this.loot.dropCacheMap(m.x, m.y, this.landmarks);
+        this.loot.cacheMaps.splice(i, 1);
       }
     }
   }

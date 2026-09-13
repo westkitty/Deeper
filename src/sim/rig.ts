@@ -41,6 +41,12 @@ export class Rig {
   maxHp = 100;
   dead = false;
   deadTimer = 0;
+  /** Assist mode: 2x HP, half threat damage (accessibility, persisted). */
+  assistMode = false;
+  /** Magnet streak: consecutive quick pickups boost vacuum briefly. */
+  magnetStreak = 0;
+  magnetStreakTimer = 0;
+  lastPickupAt = -99;
 
   cargo = new Map<string, number>();
   money = 0;
@@ -118,6 +124,11 @@ export class Rig {
   // ---- movement -------------------------------------------------------------
   step(input: RigInput, tick: number) {
     const w = this.world;
+    // magnet streak decay
+    if (this.magnetStreakTimer > 0) {
+      this.magnetStreakTimer -= TICK_DT;
+      if (this.magnetStreakTimer <= 0) this.magnetStreak = 0;
+    }
     if (this.dead) {
       this.deadTimer -= TICK_DT;
       if (this.deadTimer <= 0) this.emergencyExtract();
@@ -289,8 +300,14 @@ export class Rig {
     // (fires damage through events in GameSim)
   }
 
+  effectiveMaxHp(): number {
+    return this.assistMode ? this.maxHp * 2 : this.maxHp;
+  }
+
   hurt(amount: number, cause: string) {
     if (this.dead) return;
+    if (this.assistMode && cause === "threat") amount *= 0.5;
+    if (this.assistMode && (cause === "heat" || cause === "pressure")) amount *= 0.75;
     this.hp -= amount;
     this.bus.emit({ type: "hurt", amount, cause });
     if (this.hp <= 0) {
@@ -301,18 +318,32 @@ export class Rig {
     }
   }
 
-  /** Emergency extraction: keep upgrades + world; lose part of carried cargo. */
-  emergencyExtract() {
-    const lost = Math.floor(this.cargoValue() * 0.3);
+  /** Emergency extraction: keep upgrades + world; drop 25% cargo as recoverable cache. */
+  emergencyExtract(): { lost: number; dropped: [string, number][]; x: number; y: number } {
+    const dropped: [string, number][] = [];
+    let lost = 0;
+    for (const [res, amount] of this.cargo) {
+      const drop = Math.floor(amount * 0.25);
+      if (drop > 0) {
+        dropped.push([res, drop]);
+        lost += drop * (RESOURCES[res]?.value ?? 0);
+      }
+      const keep = amount - drop;
+      if (keep <= 0) this.cargo.delete(res);
+      else this.cargo.set(res, keep);
+    }
+    const dx = this.x;
+    const dy = this.y;
+    // remaining cargo is lost (extraction fee), dropped share becomes a corpse-run cache
     this.cargo.clear();
     this.dead = false;
-    this.hp = this.maxHp;
+    this.hp = this.effectiveMaxHp();
     this.x = BASE_X + 2;
     this.y = SURFACE_ROW - 3.2;
     this.vx = 0;
     this.vy = 0;
     this.bus.emit({ type: "emergencyExtract" });
-    return lost;
+    return { lost, dropped, x: dx, y: dy };
   }
 
   // ---- excavation -------------------------------------------------------------
@@ -458,7 +489,20 @@ export class Rig {
     this.cargo.set(res, (this.cargo.get(res) ?? 0) + take);
     if (take < amount) this.bus.emit({ type: "cargoFull" });
     this.bus.emit({ type: "pickup", res, amount: take, x: this.x, y: this.y });
+    // magnet streak: quick consecutive pickups widen vacuum briefly
+    const now = performance.now() / 1000;
+    if (now - this.lastPickupAt < 2.0) this.magnetStreak++;
+    else this.magnetStreak = 1;
+    this.lastPickupAt = now;
+    this.magnetStreakTimer = 2.0;
     return take;
+  }
+
+  /** Effective vacuum including magnet-streak bonus (decays in step). */
+  effectiveVacuum(): number {
+    const base = Math.max(this.fx().vacuum, tool(this.toolTier).vacuum);
+    if (this.magnetStreak >= 5 && this.magnetStreakTimer > 0) return base + 1.5;
+    return base;
   }
 }
 

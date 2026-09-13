@@ -34,6 +34,11 @@ export class World {
   activeChunks = new Set<number>();
   /** Cell indices the player/world have modified (for delta persistence). */
   edited = new Set<number>();
+  /** Metrics: dirty flush stats for diagnostics overlay. */
+  metrics = { dirtyFlushes: 0, cellsSet: 0, damageAdds: 0, batchCoalesced: 0 };
+  /** Batched dirty-chunk queue: coalesces rapid same-chunk edits per tick. */
+  private dirtyBatch = new Map<number, number>();
+  private batchTick = -1;
 
   constructor(seed: number) {
     this.seed = seed >>> 0;
@@ -72,7 +77,35 @@ export class World {
     const i = x + y * this.w;
     this.tiles[i] = id;
     this.damage[i] = 0;
-    this.dirtyChunks.add(this.chunkOf(x, y));
+    this.metrics.cellsSet++;
+    this.markDirty(x, y);
+  }
+
+  /** Batched dirty marking: same-chunk edits within a tick coalesce. */
+  markDirty(x: number, y: number, tick = -1) {
+    const c = this.chunkOf(x, y);
+    if (tick >= 0) {
+      if (tick !== this.batchTick) {
+        this.batchTick = tick;
+        this.dirtyBatch.clear();
+      }
+      const n = (this.dirtyBatch.get(c) ?? 0) + 1;
+      this.dirtyBatch.set(c, n);
+      if (n > 1) this.metrics.batchCoalesced++;
+    }
+    this.dirtyChunks.add(c);
+  }
+
+  /** Drain up to `budget` dirty chunks (renderer calls per frame). */
+  drainDirty(budget: number): number[] {
+    const out: number[] = [];
+    for (const c of this.dirtyChunks) {
+      out.push(c);
+      if (out.length >= budget) break;
+    }
+    for (const c of out) this.dirtyChunks.delete(c);
+    if (out.length) this.metrics.dirtyFlushes++;
+    return out;
   }
   getDef(x: number, y: number): MaterialDef {
     return mat(this.get(x, y));
@@ -93,6 +126,7 @@ export class World {
     if (!this.inBounds(x, y)) return;
     const i = x + y * this.w;
     this.damage[i] = Math.min(0xffff, this.damage[i] + amount);
+    this.metrics.damageAdds++;
     this.dirtyChunks.add(this.chunkOf(x, y));
   }
   damageRatio(x: number, y: number): number {

@@ -26,6 +26,18 @@ export class BaseProgress {
     this.bus = bus;
   }
 
+  /** Stage 6 campus: free surface fast-travel + repair aura at the works. */
+  get campusOnline(): boolean {
+    return this.stage >= 5;
+  }
+
+  /** Repair aura HP/sec when near the works (scales with stage). */
+  auraRate(): number {
+    if (this.stage >= 5) return 8;
+    if (this.stage >= 3) return 3;
+    return 0;
+  }
+
   /** Evaluate thresholds after any progression event. */
   evaluate(ctx: { lifetimeEarned: number; ownedTools: number; upgrades: Set<string>; deepestStratum: StratumId }) {
     for (let s = this.stage + 1; s < BASE_STAGES.length; s++) {

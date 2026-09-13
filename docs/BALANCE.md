@@ -1,7 +1,16 @@
 # DEEPER — BALANCE
 
-Numbers current at v1.0.0. Everything here is either read directly from
-`src/sim/tools.ts`/`rig.ts` or asserted by `tests/unit/progression.test.ts`.
+Numbers current at v1.1.0 (iteration 1). Everything here is either read directly from
+`src/sim/tools.ts`/`rig.ts`/`config.ts` (BALANCE table) or asserted by
+`tests/unit/progression.test.ts` + `tests/unit/iteration1.test.ts`.
+
+## Iteration-1 economy deltas (additive; power contract unchanged)
+
+- Bulk haul bonus: ≥50-unit sales pay +10% (`sellBulkBonusThreshold/Mul`).
+- Cartographer bonus: +1% sell per 5 landmarks, cap +15%.
+- Surface prices fixed at list; deep ticker variance (±6%) applies below row 8.
+- Death now drops 25% of cargo as a recoverable corpse-run cache (was: 30% value lost).
+- Elites: 2.2× HP, 1.4× damage, 3× drops, 8% spawn chance.
 
 ## The power contract
 

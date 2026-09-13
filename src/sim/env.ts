@@ -16,6 +16,8 @@ import type { EventBus } from "./events";
 export interface EnvOptions {
   /** Max liquid cell transitions per tick (performance bound). */
   liquidBudget?: number;
+  /** Max milliseconds per env step (perf budget; defers remainder). */
+  msBudget?: number;
 }
 
 export class EnvSim {
@@ -25,17 +27,21 @@ export class EnvSim {
   box = { x0: 0, y0: 0, x1: 0, y1: 0 };
   private rng: RNG;
   private liquidBudget: number;
+  private msBudget: number;
   /** Fires: position + life. Cell-free list. */
   fires: { x: number; y: number; life: number }[] = [];
   /** Resonance fractures staged over time for the visible cascade. */
   pendingFractures: { x: number; y: number; delay: number }[] = [];
   stats = { steam: 0, explosions: 0, resonated: 0, drained: 0 };
+  /** Perf metrics for diagnostics overlay. */
+  metrics = { lastMs: 0, overBudgetTicks: 0, spills: 0, preheated: 0 };
 
   constructor(world: World, bus: EventBus, opts: EnvOptions = {}) {
     this.world = world;
     this.bus = bus;
     this.rng = new RNG(0x5eed + world.seed);
     this.liquidBudget = opts.liquidBudget ?? 2600;
+    this.msBudget = opts.msBudget ?? 4;
   }
 
   /** Water level at a cell (0 if none). */
@@ -50,7 +56,10 @@ export class EnvSim {
   }
 
   step(tick: number) {
+    const t0 = performance.now();
     const w = this.world;
+    // magma pre-heat: stone adjacent to magma softens 10% (capped, throttled)
+    if (tick % 30 === 0) this.stepPreheat();
     // fires
     for (let f = this.fires.length - 1; f >= 0; f--) {
       const fire = this.fires[f];
@@ -100,6 +109,62 @@ export class EnvSim {
     if (tick % 2 === 0) this.stepLiquids(tick);
     if (tick % 3 === 0) this.stepGas(tick);
     if (tick % 2 === 1) this.stepGranular();
+    const ms = performance.now() - t0;
+    this.metrics.lastMs = ms;
+    if (ms > this.msBudget) this.metrics.overBudgetTicks++;
+  }
+
+  /** Magma pre-heat: adjacent dense stone takes small pre-damage (softens ~10%). */
+  private stepPreheat() {
+    const w = this.world;
+    const { x0, y0, x1, y1 } = this.box;
+    let n = 0;
+    for (let y = y0; y <= y1 && n < 40; y += 2) {
+      for (let x = x0; x <= x1 && n < 40; x += 2) {
+        const i = x + y * w.w;
+        if (w.liquid[i] !== LIQ_MAGMA) continue;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (!w.inBounds(nx, ny)) continue;
+          const ni = nx + ny * w.w;
+          const t = w.tiles[ni];
+          if (t === M.AIR || t === M.BEDROCK) continue;
+          const d = mat(t);
+          if (d.family !== "dense" && d.family !== "brittle") continue;
+          // cap pre-damage at 10% of HP so magma never auto-breaks
+          if (w.damage[ni] < d.hp * 0.1) {
+            w.damage[ni] = Math.min(Math.floor(d.hp * 0.1), w.damage[ni] + 2);
+            n++;
+            this.metrics.preheated++;
+          }
+        }
+      }
+    }
+  }
+
+  /** Water pressure push on an entity (rig/loot): returns [pushX, pushY]. */
+  pressurePush(x: number, y: number): [number, number] {
+    const w = this.world;
+    const cx = Math.floor(x);
+    const cy = Math.floor(y);
+    if (!w.inBounds(cx, cy)) return [0, 0];
+    const i = cx + cy * w.w;
+    if (w.liquid[i] !== LIQ_WATER || w.liqLevel[i] < 5) return [0, 0];
+    // flow direction: toward lower neighbouring level
+    let bx = 0;
+    let by = 1; // waterlogs drag down by default
+    let best = w.liqLevel[i];
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1]] as const) {
+      const nx = cx + dx;
+      const ny = cy + dy;
+      if (!w.inBounds(nx, ny)) continue;
+      const ni = nx + ny * w.w;
+      const lv = w.liquid[ni] === LIQ_WATER ? w.liqLevel[ni] : 0;
+      if (lv < best) { best = lv; bx = dx; by = dy; }
+    }
+    const force = 14 * (w.liqLevel[i] / 8);
+    return [bx * force, by * force];
   }
 
   // -------------------------------------------------------------------------

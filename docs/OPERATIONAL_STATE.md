@@ -1,6 +1,6 @@
 # DEEPER — OPERATIONAL_STATE
 
-Last updated: v1.0.0 release pass. Vocabulary: **VERIFIED** (automated or captured evidence),
+Last updated: v1.1.0 iteration-1 pass (see SELF_IMPROVEMENT_LOG.md). Vocabulary: **VERIFIED** (automated or captured evidence),
 **BROKEN** (known defect), **UNVERIFIED** (implemented, no evidence yet), **PENDING** (not
 built). No claims without evidence — anything you don't see here is UNVERIFIED by default.
 

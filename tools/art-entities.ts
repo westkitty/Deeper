@@ -195,6 +195,40 @@ export const THREAT_DRAWERS: Record<string, (f: number) => Px> = {
   drone: threatDrone,
 };
 
+/** Elite tint: purple crown + rim light over the base move frame. */
+export function threatElite(family: string): Px {
+  const draw = THREAT_DRAWERS[family];
+  const p = draw(0);
+  // crown spikes
+  const gold = hex("#b070e8");
+  for (let x = 8; x <= 16; x += 4) {
+    p.line(x, 0, x + 2, 4, gold);
+  }
+  p.rect(7, 3, 11, 2, gold);
+  // rim light: brighten edge pixels
+  for (let y = 0; y < p.h; y++) {
+    for (let x = 0; x < p.w; x++) {
+      const i = (y * p.w + x) * 4;
+      if (p.data[i + 3] > 0 && (x === 0 || p.data[(y * p.w + x - 1) * 4 + 3] === 0)) {
+        p.data[i] = Math.min(255, p.data[i] + 60);
+        p.data[i + 1] = Math.min(255, p.data[i + 1] + 40);
+      }
+    }
+  }
+  return p;
+}
+
+/** Telegraph flash: white-hot outline over the attack frame (lunge wind-up). */
+export function threatTelegraph(family: string): Px {
+  const draw = THREAT_DRAWERS[family];
+  const p = draw(2);
+  p.outline(hex("#ffffff", 230));
+  for (let x = 0; x < p.w; x += 3) {
+    p.set(x, 0, hex("#f8d048", 200));
+  }
+  return p;
+}
+
 // ---------------------------------------------------------------------------
 // RESOURCE ICONS — silhouette + texture differences per family
 // ---------------------------------------------------------------------------
@@ -460,6 +494,42 @@ export function uiIcon(key: string): Px {
       p.line(3, 8, 13, 8, hex("#f8d048")); p.line(8, 2, 8, 13, hex("#f8d048"));
       p.line(5, 5, 11, 10, hex("#f8d048")); p.line(11, 5, 5, 10, hex("#f8d048"));
       break;
+    case "filter":
+      p.line(2, 3, 14, 3, fg); p.line(4, 6, 12, 6, fg); p.line(6, 9, 10, 9, fg);
+      p.line(7, 12, 9, 12, hex("#48c8b0")); break;
+    case "zoom_in":
+      p.ring(7, 7, 4, fg); p.line(10, 10, 14, 14, fg);
+      p.line(5, 7, 9, 7, hex("#5fe07a")); p.line(7, 5, 7, 9, hex("#5fe07a")); break;
+    case "zoom_out":
+      p.ring(7, 7, 4, fg); p.line(10, 10, 14, 14, fg);
+      p.line(5, 7, 9, 7, hex("#e05838")); break;
+    case "export":
+      p.rect(3, 8, 10, 5, hex("#5a636e")); p.line(8, 2, 8, 9, fg);
+      p.line(5, 5, 8, 2, fg); p.line(11, 5, 8, 2, fg); break;
+    case "warn":
+      for (let y = 3; y < 11; y++) { const w = y - 2; for (let x = 8 - w; x <= 8 + w; x++) p.set(x, y, hex("#e8b84a")); }
+      p.rect(7, 5, 2, 3, hex("#1a1810")); p.set(8, 9, hex("#1a1810")); break;
+    case "check":
+      p.line(3, 8, 7, 12, hex("#5fe07a")); p.line(7, 12, 13, 4, hex("#5fe07a"));
+      p.line(3, 9, 7, 13, hex("#5fe07a")); break;
+    case "lock":
+      p.rect(4, 7, 8, 6, hex("#8a929a")); p.ring(8, 7, 3, hex("#8a929a"));
+      p.set(8, 10, hex("#1a1810")); break;
+    case "bolt":
+      p.line(9, 2, 5, 9, hex("#f8d048")); p.line(5, 9, 8, 9, hex("#f8d048"));
+      p.line(8, 9, 6, 14, hex("#f8d048")); break;
+    case "magnet":
+      p.ring(8, 7, 5, hex("#e05838")); p.ring(8, 7, 2.6, 0);
+      p.rect(3, 7, 3, 4, hex("#e8e0d0")); p.rect(10, 7, 3, 4, hex("#e8e0d0")); break;
+    case "skull2":
+      p.disc(8, 7, 4.4, hex("#b070e8")); p.rect(5, 9, 6, 3, hex("#b070e8"));
+      p.set(6, 6, hex("#ffffff")); p.set(10, 6, hex("#ffffff")); break;
+    case "compass":
+      p.ring(8, 8, 6, fg); p.line(8, 8, 11, 5, hex("#e05838"));
+      p.line(8, 8, 5, 11, hex("#48c8b0")); p.set(8, 8, fg); break;
+    case "crate":
+      p.rect(3, 5, 10, 8, hex("#7d5a3a")); p.rect(3, 5, 10, 2, hex("#9a744c"));
+      p.line(3, 5, 13, 13, hex("#5c421f")); p.line(13, 5, 3, 13, hex("#5c421f")); break;
     default:
       p.disc(8, 8, 4, hex("#c8c8c8"));
   }
