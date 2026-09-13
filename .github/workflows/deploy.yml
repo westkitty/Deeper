@@ -39,7 +39,10 @@ jobs:
       - name: Build
         run: npm run build
 
+      # self-enable Pages (build_type=workflow) — public repo, pages:write token
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:
