@@ -66,6 +66,41 @@ export function valueNoise(x: number, y: number, seed: number, period = 0): numb
   return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy;
 }
 
+/** SplitMix32 — higher-quality stream for loot/threat rolls (still deterministic). */
+export class SplitMix32 {
+  private s: number;
+  constructor(seed: number) {
+    this.s = seed >>> 0;
+  }
+  next(): number {
+    this.s = (this.s + 0x9e3779b9) >>> 0;
+    let z = this.s;
+    z = Math.imul(z ^ (z >>> 16), 0x21f0aaad);
+    z = Math.imul(z ^ (z >>> 15), 0x735a2d97);
+    z ^= z >>> 15;
+    return (z >>> 0) / 4294967296;
+  }
+  int(minInclusive: number, maxExclusive: number): number {
+    return minInclusive + Math.floor(this.next() * (maxExclusive - minInclusive));
+  }
+  range(min: number, max: number): number {
+    return min + this.next() * (max - min);
+  }
+  chance(p: number): boolean {
+    return this.next() < p;
+  }
+}
+
+/** Forked subsystem streams: worldgen/loot/threats/env never share state. */
+export function forkStreams(seed: number): { world: RNG; loot: SplitMix32; threats: SplitMix32; env: RNG } {
+  return {
+    world: new RNG(seed ^ 0x1a2b3c),
+    loot: new SplitMix32(seed ^ 0x4d5e6f),
+    threats: new SplitMix32(seed ^ 0x708192),
+    env: new RNG(seed ^ 0xa3b4c5),
+  };
+}
+
 /** Fractal brownian motion over valueNoise. */
 export function fbm(x: number, y: number, seed: number, octaves = 3, lacunarity = 2, gain = 0.5): number {
   let amp = 0.5;

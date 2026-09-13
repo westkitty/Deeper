@@ -38,6 +38,11 @@ const LIQ_COLOR: Record<number, number> = {
   [LIQ_OIL]: 0x2a2430,
 };
 
+/** Materials with a 4th terrain variant (must match tools/art.ts EXTRA_VARIANT). */
+const FOUR_VARIANT = new Set(["soil", "stone", "basalt", "crystal", "concrete", "sandstone"]);
+/** High-tier ores with bright variants. */
+const BRIGHT_ORE = new Set(["tungsten", "quartz", "voidgem"]);
+
 export class TerrainRenderer {
   scene: Phaser.Scene;
   world: World;
@@ -91,15 +96,23 @@ export class TerrainRenderer {
         if (t !== M.AIR) {
           const frameKey = MAT_FRAME[t];
           if (frameKey) {
-            const v = this.world.variant[i] % 3;
+            const v = this.world.variant[i] % (FOUR_VARIANT.has(frameKey) ? 4 : 3);
             b.create(px, py, `t_${frameKey}_${v}`);
           }
-          // ore overlay
+          // ore overlay (bright variants for high-tier ores, sparkles on rich cells)
           const oi = this.world.ore[i];
           if (oi > 0) {
             const res = ORE_KEYS[oi - 1];
             const of = ORE_FRAME[res];
-            if (of) b.create(px, py, `ore_${of}_${(x + y) % 2}`);
+            if (of) {
+              if (BRIGHT_ORE.has(of) && (x * 7 + y * 13) % 3 === 0) b.create(px, py, `ore_${of}_bright`);
+              else b.create(px, py, `ore_${of}_${(x + y) % 2}`);
+              if ((x * 5 + y * 11) % 7 === 0) b.create(px, py, `ore_sparkle_${(x + y) % 2}`);
+            }
+          }
+          // rare fossil decals in deep sedimentary bands
+          if (y > 200 && y < 460 && (x * 13 + y * 7) % 61 === 0) {
+            b.create(px, py, `decal_fossil_${(x + y) % 3}`);
           }
           // damage cracks
           const d = mat(t);
@@ -189,16 +202,36 @@ export class TerrainRenderer {
     return n;
   }
 
+  private fpsAvg = 60;
+  private degraded = false;
+
   update(dt: number) {
+    // FPS tracking → auto-degrade liquid redraw rate when slow
+    this.fpsAvg = this.fpsAvg * 0.95 + (1 / Math.max(dt, 1e-4)) * 0.05;
+    const wantDegraded = this.fpsAvg < 30;
+    if (wantDegraded !== this.degraded) {
+      this.degraded = wantDegraded;
+      this.chunkBudget = wantDegraded ? 1 : 3;
+    }
     this.liquidTimer += dt;
-    if (this.liquidTimer > 0.25) {
+    const interval = this.degraded ? 0.6 : 0.25;
+    if (this.liquidTimer > interval) {
       this.liquidTimer = 0;
       this.liquidPhase += 0.8;
+      // cull: only redraw liquid for chunks near the camera
+      const cam = this.scene.cameras.main;
+      const x0 = Math.max(0, Math.floor(cam.scrollX / (CHUNK * CELL)) - 1);
+      const y0 = Math.max(0, Math.floor(cam.scrollY / (CHUNK * CELL)) - 1);
+      const x1 = Math.min(CHUNKS_X - 1, Math.ceil((cam.scrollX + cam.width) / (CHUNK * CELL)) + 1);
+      const y1 = Math.min(CHUNKS_Y - 1, Math.ceil((cam.scrollY + cam.height) / (CHUNK * CELL)) + 1);
       for (let cy = 0; cy < CHUNKS_Y; cy++) {
         for (let cx = 0; cx < CHUNKS_X; cx++) {
-          if (this.blitters[cy * CHUNKS_X + cx] && this.liquidGfx[cy * CHUNKS_X + cx]) {
-            this.drawLiquid(cx, cy);
-          }
+          const b = this.blitters[cy * CHUNKS_X + cx];
+          const g = this.liquidGfx[cy * CHUNKS_X + cx];
+          const visible = cx >= x0 && cx <= x1 && cy >= y0 && cy <= y1;
+          if (b) b.setVisible(visible);
+          if (g) g.setVisible(visible);
+          if (b && g && visible) this.drawLiquid(cx, cy);
         }
       }
     }

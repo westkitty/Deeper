@@ -439,6 +439,56 @@ export function buildVFX(add: (name: string, p: Px) => void) {
     p.set(8, 7, hex("#3a342e")); p.set(1, 7, 0);
     add("vfx_debris", p);
   }
+  // scan ring (2 frames: expanding ping)
+  for (let f = 0; f < 2; f++) {
+    const p = new Px(48, 48);
+    p.ring(24, 24, f === 0 ? 10 : 20, hex("#48c8b0", f === 0 ? 220 : 140));
+    p.ring(24, 24, f === 0 ? 6 : 14, hex("#a0f0e0", f === 0 ? 160 : 100));
+    add(`vfx_scan_${f}`, p);
+  }
+  // resonance wavefront (2nd frame: wider + brighter core)
+  for (let f = 0; f < 2; f++) {
+    const p = new Px(40, 40);
+    p.ring(20, 20, f === 0 ? 8 : 16, hex("#b070e8", 200));
+    p.ring(20, 20, f === 0 ? 4 : 9, hex("#e8d0ff", 180));
+    if (f === 1) p.disc(20, 20, 3, hex("#ffffff", 160));
+    add(`vfx_reswave_${f}`, p);
+  }
+  // explosion core flash (extra frame: white-hot ignition)
+  {
+    const p = new Px(32, 32);
+    p.disc(16, 16, 7, hex("#ffffff", 240));
+    p.disc(16, 16, 11, hex("#f8d048", 200));
+    p.disc(16, 16, 15, hex("#f0a040", 140));
+    add("vfx_ignite", p);
+  }
+  // heal sparkle (base aura / cache regen)
+  {
+    const p = new Px(10, 10);
+    p.line(5, 1, 5, 8, hex("#5fe07a", 220));
+    p.line(1, 5, 8, 5, hex("#5fe07a", 220));
+    p.set(5, 5, hex("#ffffff"));
+    p.set(3, 3, hex("#b0f0c0", 200));
+    p.set(7, 7, hex("#b0f0c0", 200));
+    add("vfx_heal", p);
+  }
+  // elite threat aura ring
+  {
+    const p = new Px(32, 24);
+    p.ring(16, 12, 11, hex("#b070e8", 170));
+    p.ring(16, 12, 8, hex("#b070e8", 90));
+    add("vfx_elite_aura", p);
+  }
+  // telegraph brackets (lunge wind-up corners)
+  {
+    const p = new Px(32, 24);
+    const c = hex("#f8d048", 230);
+    p.rect(0, 0, 6, 2, c); p.rect(0, 0, 2, 6, c);
+    p.rect(26, 0, 6, 2, c); p.rect(30, 0, 2, 6, c);
+    p.rect(0, 22, 6, 2, c); p.rect(0, 18, 2, 6, c);
+    p.rect(26, 22, 6, 2, c); p.rect(30, 18, 2, 6, c);
+    add("vfx_telegraph", p);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -500,4 +550,78 @@ export function favicon(): Px {
   p.rect(12, 0, 8, 5, hex("#e05828"));
   p.rect(12, 0, 8, 1, hex("#f8d048"));
   return p;
+}
+
+/** High-contrast monochrome logo variant (loading / print / a11y). */
+export function logoMono(): Px {
+  const p = logo();
+  for (let y = 0; y < p.h; y++) {
+    for (let x = 0; x < p.w; x++) {
+      const i = (y * p.w + x) * 4;
+      if (p.data[i + 3] === 0) continue;
+      const lum = Math.round(0.299 * p.data[i] + 0.587 * p.data[i + 1] + 0.114 * p.data[i + 2]);
+      const v = lum > 128 ? 240 : 20;
+      p.data[i] = v;
+      p.data[i + 1] = v;
+      p.data[i + 2] = v;
+    }
+  }
+  return p;
+}
+
+/** Interaction props: open valve, deep core, death cache, scan pylon. */
+export function buildInteract(add: (name: string, p: Px) => void) {
+  // open valve (drained state)
+  {
+    const p = new Px(16, 16);
+    p.ring(8, 8, 5.4, shade(RUST, -0.2));
+    p.line(8, 3, 8, 13, METAL_L);
+    p.disc(8, 8, 1.6, hex("#48c8b0"));
+    p.outline(OUTL);
+    add("prop_valve_open", p);
+  }
+  // deep engine core (finale interactable)
+  {
+    const p = new Px(24, 24);
+    p.disc(12, 12, 10, hex("#3a4a5a"));
+    p.ring(12, 12, 9, hex("#6a7a8a"));
+    p.disc(12, 12, 5, hex("#e05838"));
+    p.disc(12, 12, 2.4, hex("#f8d048"));
+    for (let a = 0; a < 8; a++) {
+      const ang = (a / 8) * Math.PI * 2;
+      p.set(12 + Math.round(Math.cos(ang) * 7), 12 + Math.round(Math.sin(ang) * 7), hex("#f8d048"));
+    }
+    p.outline(OUTL);
+    add("prop_core", p);
+  }
+  // death cache (corpse-run recovery crate)
+  {
+    const p = new Px(16, 16);
+    p.rect(2, 5, 12, 9, hex("#4a3a5a"));
+    p.rect(2, 5, 12, 2, hex("#6a5a7a"));
+    p.line(2, 5, 14, 14, hex("#b070e8"));
+    p.line(14, 5, 2, 14, hex("#b070e8"));
+    p.set(8, 9, hex("#ffffff"));
+    p.outline(OUTL);
+    add("prop_deathcache", p);
+  }
+  // scan pylon (survey marker for persisted overlays)
+  {
+    const p = new Px(8, 16);
+    p.rect(3, 4, 2, 12, METAL);
+    p.disc(4, 3, 2.4, hex("#48c8b0"));
+    p.set(4, 3, hex("#e8fff8"));
+    p.outline(OUTL);
+    add("prop_scanpylon", p);
+  }
+  // cache map (navigational find)
+  {
+    const p = new Px(12, 12);
+    p.rect(1, 1, 10, 10, hex("#d8cfae"));
+    p.line(2, 9, 5, 5, hex("#8a4a30"));
+    p.line(5, 5, 9, 6, hex("#8a4a30"));
+    p.set(9, 6, hex("#e05838"));
+    p.outline(OUTL);
+    add("prop_cachemap", p);
+  }
 }

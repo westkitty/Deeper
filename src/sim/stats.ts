@@ -20,6 +20,18 @@ export class StatsTracker {
   playtime = 0; // seconds
   tripsSold = 0;
   strataSeen = new Set<string>(["surface"]);
+  // ---- iteration-1 aggregate counters (finale breakdown + diagnostics) ----
+  scansPulsed = 0;
+  chargesDetonated = 0;
+  resonanceCombos = 0;
+  bestResonanceCombo = 0;
+  elitesKilled = 0;
+  threatsKilled = 0;
+  deathsRecovered = 0;
+  liftsTaken = 0;
+  landmarksFound = 0;
+  perStratumBreaks: Record<string, number> = {};
+  magnetStreakBest = 0;
 
   noteBreak() {
     this.cellsDestroyed++;
@@ -38,6 +50,9 @@ export class StatsTracker {
     if (rank > curRank) this.deepestStratum = stratum;
   }
 
+  noteStratumBreak(stratum: string) {
+    this.perStratumBreaks[stratum] = (this.perStratumBreaks[stratum] ?? 0) + 1;
+  }
   serialize() {
     return {
       cellsDestroyed: this.cellsDestroyed, oreExtracted: this.oreExtracted,
@@ -47,11 +62,18 @@ export class StatsTracker {
       markedConquered: this.markedConquered, explosionsSurvived: this.explosionsSurvived,
       playtime: this.playtime, tripsSold: this.tripsSold,
       strataSeen: [...this.strataSeen],
+      scansPulsed: this.scansPulsed, chargesDetonated: this.chargesDetonated,
+      resonanceCombos: this.resonanceCombos, bestResonanceCombo: this.bestResonanceCombo,
+      elitesKilled: this.elitesKilled, threatsKilled: this.threatsKilled,
+      deathsRecovered: this.deathsRecovered, liftsTaken: this.liftsTaken,
+      landmarksFound: this.landmarksFound, perStratumBreaks: { ...this.perStratumBreaks },
+      magnetStreakBest: this.magnetStreakBest,
     };
   }
   load(d: ReturnType<StatsTracker["serialize"]> | undefined) {
     if (!d) return;
     Object.assign(this, d);
-    this.strataSeen = new Set(d.strataSeen ?? ["surface"]);
+    this.strataSeen = new Set((d as { strataSeen?: string[] }).strataSeen ?? ["surface"]);
+    this.perStratumBreaks = { ...((d as { perStratumBreaks?: Record<string, number> }).perStratumBreaks ?? {}) };
   }
 }

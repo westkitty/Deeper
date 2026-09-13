@@ -11,6 +11,29 @@ const BANK: Record<string, string> = {
   wood: "dig_wood", heavy: "dig_heavy", none: "dig_soft",
 };
 
+const SFX_NAMES = [
+  "dig_soft", "dig_rock", "dig_metal", "dig_concrete", "dig_crystal", "dig_wood",
+  "dig_heavy", "dig_sand", "dig_brittle", "hard_fail", "upgrade", "pickup", "big_loot",
+  "cargo_full", "sell", "explosion", "ignite", "water", "steam", "magma", "resonance",
+  "machine", "base_amb", "hurt", "extract", "discovery", "stratum",
+  // iteration-1 additions
+  "scan", "lift", "valve", "relic", "blueprint", "threat_warn",
+  "tool_auger", "tool_twin", "tool_hammer", "tool_thermal", "tool_seismic",
+  "tool_rotary", "tool_resonator", "tool_maw",
+];
+
+/** Per-stratum ambient tint (filter freq + rumble gain). */
+const STRATUM_AMB: Record<string, { freq: number; rumble: number }> = {
+  surface: { freq: 320, rumble: 0.05 },
+  rootbed: { freq: 280, rumble: 0.07 },
+  oldworks: { freq: 240, rumble: 0.09 },
+  buriedmile: { freq: 200, rumble: 0.11 },
+  drownedfault: { freq: 260, rumble: 0.08 },
+  redfault: { freq: 150, rumble: 0.16 },
+  glasschoir: { freq: 420, rumble: 0.06 },
+  enginedeep: { freq: 120, rumble: 0.2 },
+};
+
 export class AudioEngine {
   ctx: AudioContext | null = null;
   master: GainNode | null = null;
@@ -23,6 +46,9 @@ export class AudioEngine {
   vol = { master: 0.8, sfx: 0.9, ambient: 0.6 };
   shake = 1;
   reducedMotion = false;
+  muted = false;
+  private loading = new Set<string>();
+  private stratum: string = "surface";
 
   /** Must be called from a user gesture. */
   ensure(): boolean {
@@ -50,37 +76,49 @@ export class AudioEngine {
     }
   }
 
+  /** Eager-load the critical bank; the rest streams lazily on first play. */
   async loadAll() {
-    const names = [
-      "dig_soft", "dig_rock", "dig_metal", "dig_concrete", "dig_crystal", "dig_wood",
-      "dig_heavy", "dig_sand", "dig_brittle", "hard_fail", "upgrade", "pickup", "big_loot",
-      "cargo_full", "sell", "explosion", "ignite", "water", "steam", "magma", "resonance",
-      "machine", "base_amb", "hurt", "extract", "discovery", "stratum",
-      "tool_auger", "tool_twin", "tool_hammer", "tool_thermal", "tool_seismic",
-      "tool_rotary", "tool_resonator", "tool_maw",
-    ];
     if (!this.ctx) return;
-    await Promise.all(names.map(async (n) => {
-      try {
-        const res = await fetch(`assets/audio/${n}.wav`);
-        const arr = await res.arrayBuffer();
-        const buf = await this.ctx!.decodeAudioData(arr);
-        this.buffers.set(n, buf);
-      } catch {
-        // missing sound is non-fatal
-      }
-    }));
+    const critical = ["dig_soft", "dig_rock", "hard_fail", "pickup", "sell", "hurt", "base_amb", "tool_auger"];
+    await Promise.all(critical.map((n) => this.loadOne(n)));
+    // background-fill the remainder without blocking boot
+    for (const n of SFX_NAMES) {
+      if (!this.buffers.has(n)) void this.loadOne(n);
+    }
+  }
+
+  async loadOne(name: string): Promise<AudioBuffer | null> {
+    if (this.buffers.has(name) || this.loading.has(name) || !this.ctx) return this.buffers.get(name) ?? null;
+    this.loading.add(name);
+    try {
+      const res = await fetch(`assets/audio/${name}.wav`);
+      const arr = await res.arrayBuffer();
+      const buf = await this.ctx.decodeAudioData(arr);
+      this.buffers.set(name, buf);
+      return buf;
+    } catch {
+      return null; // missing sound is non-fatal
+    } finally {
+      this.loading.delete(name);
+    }
   }
 
   play(name: string, gain = 1, rate = 1) {
-    if (!this.ctx || !this.sfxBus || !this.enabled) return;
+    if (!this.ctx || !this.sfxBus || !this.enabled || this.muted) return;
     const buf = this.buffers.get(name);
-    if (!buf) return;
+    if (!buf) {
+      // lazy load then replay once ready
+      void this.loadOne(name).then((b) => {
+        if (b) this.play(name, gain, rate);
+      });
+      return;
+    }
     const src = this.ctx.createBufferSource();
     src.buffer = buf;
     src.playbackRate.value = rate;
     const g = this.ctx.createGain();
-    g.gain.value = gain;
+    // normalize hot loops slightly so late-game density doesn't clip
+    g.gain.value = name.startsWith("tool_") ? gain * 0.7 : gain;
     src.connect(g).connect(this.sfxBus);
     src.start();
   }
@@ -184,6 +222,18 @@ export class AudioEngine {
     }
   }
 
+  /** Per-stratum ambient layer: retunes the depth drone + rumble bed. */
+  setStratum(stratum: string) {
+    if (stratum === this.stratum) return;
+    this.stratum = stratum;
+    const cfg = STRATUM_AMB[stratum] ?? STRATUM_AMB.surface;
+    if (this.depthFilter && this.ctx) {
+      this.depthFilter.frequency.setTargetAtTime(cfg.freq, this.ctx.currentTime, 1.2);
+    }
+    this.rumbleGain = cfg.rumble;
+  }
+  private rumbleGain = 0.12;
+
   setVolumes(v: { master?: number; sfx?: number; ambient?: number }) {
     Object.assign(this.vol, v);
     if (this.master) this.master.gain.value = this.vol.master;
@@ -192,7 +242,15 @@ export class AudioEngine {
   }
 
   setMuted(m: boolean) {
+    this.muted = m;
+    try { localStorage.setItem("deeper.muted", m ? "1" : "0"); } catch { /* ignore */ }
     if (this.master) this.master.gain.value = m ? 0 : this.vol.master;
+  }
+
+  loadMuted() {
+    try {
+      if (localStorage.getItem("deeper.muted") === "1") this.setMuted(true);
+    } catch { /* ignore */ }
   }
 
   destroyAmbient() {

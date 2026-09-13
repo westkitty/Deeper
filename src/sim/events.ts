@@ -29,7 +29,7 @@ export type SimEvent =
   | { type: "baseStage"; stage: number }
   | { type: "liftUnlocked"; stop: string }
   | { type: "threatHit"; id: number; x: number; y: number }
-  | { type: "threatDeath"; id: number; x: number; y: number; family: string }
+  | { type: "threatDeath"; id: number; x: number; y: number; family: string; elite?: boolean }
   | { type: "geode"; x: number; y: number }
   | { type: "motherlode"; x: number; y: number }
   | { type: "wow"; key: string };
@@ -38,6 +38,10 @@ export type SimListener = (e: SimEvent) => void;
 
 export class EventBus {
   private listeners: SimListener[] = [];
+  /** Ring-buffer event log for diagnostics, e2e hooks and post-mortem dumps. */
+  private log: { t: number; e: SimEvent }[] = [];
+  private logCap = 256;
+  private counts = new Map<string, number>();
   on(fn: SimListener): () => void {
     this.listeners.push(fn);
     return () => {
@@ -46,6 +50,23 @@ export class EventBus {
     };
   }
   emit(e: SimEvent) {
+    this.log.push({ t: Date.now(), e });
+    if (this.log.length > this.logCap) this.log.shift();
+    this.counts.set(e.type, (this.counts.get(e.type) ?? 0) + 1);
     for (const fn of this.listeners) fn(e);
+  }
+  /** Last N events (newest last) for diagnostics overlay / QA hook. */
+  recent(n = 12): SimEvent[] {
+    return this.log.slice(-n).map((r) => r.e);
+  }
+  eventCounts(): Record<string, number> {
+    return Object.fromEntries(this.counts);
+  }
+  dumpLog(): { t: number; type: string }[] {
+    return this.log.map((r) => ({ t: r.t, type: r.e.type }));
+  }
+  clearLog() {
+    this.log.length = 0;
+    this.counts.clear();
   }
 }

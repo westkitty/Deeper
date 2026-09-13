@@ -30,7 +30,11 @@ export function openWorkshop(
 ): { refresh: () => void; close: () => void; root: HTMLElement } {
   const modal = el("div", "modal open");
   modal.id = "workshop";
+  modal.setAttribute("role", "dialog");
+  modal.setAttribute("aria-label", "The Works workshop");
   const panel = el("div", "panel workshop", modal);
+  let filter = "";
+  let sortAffordableFirst = false;
   const build = () => {
     panel.innerHTML = "";
     const head = el("div", "ws-head", panel);
@@ -38,10 +42,14 @@ export function openWorkshop(
     el("h2", "", head, `THE WORKS — ${stage}`);
     const money = el("div", "ws-money", head, `¤ ${sim.rig.money.toLocaleString()}`);
     void money;
+    if (eco.cartographerMul() > 1) {
+      el("div", "ws-bonus", head, `Cartographer bonus +${Math.round((eco.cartographerMul() - 1) * 100)}% · Refinery ×${eco.refineryMul().toFixed(2)}`);
+    }
     // ---- sell
     const sellBox = el("div", "ws-sell", panel);
     const cargoList = el("div", "ws-cargo-list", sellBox);
     let cargoVal = 0;
+    let cargoUnits = 0;
     if (sim.rig.cargo.size === 0) {
       el("div", "muted", cargoList, "Hopper is empty. Go dig.");
     } else {
@@ -49,16 +57,21 @@ export function openWorkshop(
         const def = RESOURCES[res];
         if (!def) continue;
         const line = el("div", "ws-cargo-row", cargoList);
-        el("img", "icon", line).src = new URL(`/Deeper/assets/asset-manifest.json`, location.href).href; // replaced below
-        line.removeChild(line.lastChild as ChildNode);
-        const v = Math.round(amount * def.value * eco.refineryMul());
+        const dot = el("span", `res-dot tier-${def.tier}`, line);
+        dot.textContent = "◆";
+        dot.setAttribute("aria-hidden", "true");
+        const v = Math.round(amount * def.value * eco.refineryMul() * eco.cartographerMul());
         cargoVal += v;
-        el("span", "ws-res", line, `${def.name} ×${amount}`);
+        cargoUnits += amount;
+        el("span", "ws-res", line, `${def.name} ×${amount} (${(amount * def.bulk).toFixed(0)}u)`);
         el("span", "ws-val", line, `¤${v}`);
       }
     }
+    if (cargoUnits >= 50) {
+      el("div", "ws-bonus", sellBox, "Bulk haul bonus +10% — full hoppers pay extra.");
+    }
     const sellBtn = button(sellBox, cargoVal > 0 ? `SELL ALL — ¤${cargoVal.toLocaleString()}` : "SELL ALL", () => {
-      const got = eco.sellAll();
+      const got = eco.sellAll(Math.floor(sim.rig.y));
       if (got > 0) hooks.onPurchase();
       build();
     }, "btn primary");
@@ -92,8 +105,19 @@ export function openWorkshop(
       }
     }
 
-    // ---- upgrades
+    // ---- upgrades (search + affordable-first sort)
     el("h3", "", panel, "MACHINE UPGRADES");
+    const toolsRow = el("div", "ws-tools-row", panel);
+    const search = el("input", "ws-search", toolsRow) as HTMLInputElement;
+    search.placeholder = "Filter upgrades…";
+    search.value = filter;
+    search.setAttribute("aria-label", "Filter upgrades");
+    search.addEventListener("input", () => { filter = search.value; build(); });
+    const sortBtn = button(toolsRow, sortAffordableFirst ? "SORT: AFFORDABLE FIRST ✓" : "SORT: AFFORDABLE FIRST", () => {
+      sortAffordableFirst = !sortAffordableFirst;
+      build();
+    }, "btn small");
+    void sortBtn;
     const upsBox = el("div", "ws-upgrades", panel);
     const families: Record<string, UpgradeDef[]> = {};
     for (const u of UPGRADES) {
@@ -102,7 +126,16 @@ export function openWorkshop(
     for (const [fam, list] of Object.entries(families)) {
       const famBox = el("div", "ws-family", upsBox);
       el("div", "ws-family-name", famBox, fam.toUpperCase());
-      for (const u of list) {
+      let items = list.filter((u) =>
+        !filter || u.name.toLowerCase().includes(filter.toLowerCase()) || u.desc.toLowerCase().includes(filter.toLowerCase()));
+      if (sortAffordableFirst) {
+        items = [...items].sort((a, b) => Number(eco.canAffordUpgrade(b.key)) - Number(eco.canAffordUpgrade(a.key)));
+      }
+      if (items.length === 0) {
+        el("div", "muted", famBox, "No matches.");
+        continue;
+      }
+      for (const u of items) {
         const owned = sim.rig.upgrades.has(u.key);
         const unlocked = eco.upgradeUnlocked(u);
         const row = el("div", `ws-up ${owned ? "owned" : unlocked ? "next" : "locked"}`, famBox);
@@ -166,61 +199,126 @@ const MAT_COLOR: Record<number, string> = {
 export function openMap(sim: GameSim, onClose: () => void): { close: () => void } {
   const modal = el("div", "modal open map-modal");
   modal.id = "map";
+  modal.setAttribute("role", "dialog");
+  modal.setAttribute("aria-label", "Survey map");
   const panel = el("div", "panel map-panel", modal);
   el("h2", "", panel, "SURVEY MAP");
+  // zoom + filter controls
+  const controls = el("div", "map-controls", panel);
+  let scale = 3;
+  let showBlocked = true;
+  let showVulnerableOnly = false;
+  let showScans = true;
   const canvas = el("canvas", "map-canvas", panel) as HTMLCanvasElement;
-  const scale = 3;
-  canvas.width = WORLD_W * scale;
-  canvas.height = WORLD_H * scale;
-  const ctx = canvas.getContext("2d")!;
-  const img = ctx.createImageData(WORLD_W, WORLD_H);
-  const w = sim.world;
-  for (let i = 0; i < WORLD_W * WORLD_H; i++) {
-    const x = i % WORLD_W;
-    const y = (i / WORLD_W) | 0;
-    let r = 10, g = 10, b = 16;
-    if (w.explored[i]) {
-      const t = w.tiles[i];
-      const hex = MAT_COLOR[t] ?? "#333";
-      r = parseInt(hex.slice(1, 3), 16);
-      g = parseInt(hex.slice(3, 5), 16);
-      b = parseInt(hex.slice(5, 7), 16);
-      if (w.liquid[i] === 1) { r = 46; g = 93; b = 110; }
-      if (w.liquid[i] === 2) { r = 224; g = 88; b = 40; }
-      if (w.ore[i] > 0) { r = Math.min(255, r + 90); g = Math.min(255, g + 80); b = 60; }
+  const draw = () => {
+    canvas.width = WORLD_W * scale;
+    canvas.height = WORLD_H * scale;
+    const ctx = canvas.getContext("2d")!;
+    const img = ctx.createImageData(WORLD_W, WORLD_H);
+    const w = sim.world;
+    for (let i = 0; i < WORLD_W * WORLD_H; i++) {
+      const x = i % WORLD_W;
+      const y = (i / WORLD_W) | 0;
+      void x;
+      void y;
+      let r = 10, g = 10, b = 16;
+      if (w.explored[i]) {
+        const t = w.tiles[i];
+        const hex = MAT_COLOR[t] ?? "#333";
+        r = parseInt(hex.slice(1, 3), 16);
+        g = parseInt(hex.slice(3, 5), 16);
+        b = parseInt(hex.slice(5, 7), 16);
+        if (w.liquid[i] === 1) { r = 46; g = 93; b = 110; }
+        if (w.liquid[i] === 2) { r = 224; g = 88; b = 40; }
+        if (w.ore[i] > 0) { r = Math.min(255, r + 90); g = Math.min(255, g + 80); b = 60; }
+      }
+      const o = i * 4;
+      img.data[o] = r; img.data[o + 1] = g; img.data[o + 2] = b; img.data[o + 3] = 255;
     }
-    const o = i * 4;
-    img.data[o] = r; img.data[o + 1] = g; img.data[o + 2] = b; img.data[o + 3] = 255;
-  }
-  // draw upscaled
-  const tmp = document.createElement("canvas");
-  tmp.width = WORLD_W; tmp.height = WORLD_H;
-  tmp.getContext("2d")!.putImageData(img, 0, 0);
-  ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(tmp, 0, 0, WORLD_W * scale, WORLD_H * scale);
-  // landmarks
-  for (const l of sim.landmarks) {
-    if (!l.discovered || l.stratum === "surface") continue;
-    ctx.fillStyle = "#f8d048";
-    ctx.fillRect(l.x * scale + scale * 2, l.y * scale + scale * 2, 4, 4);
-  }
-  // blocked markers
-  for (const s of sim.blocked.sites.values()) {
-    ctx.fillStyle = s.vulnerable ? "#5fe07a" : "#e05838";
-    ctx.fillRect(s.x * scale - 1, s.y * scale - 1, 6, 6);
-  }
-  // base + rig
-  ctx.fillStyle = "#d8a83c";
-  ctx.fillRect(24 * scale - 2, 7 * scale - 2, 10, 6);
-  ctx.fillStyle = "#ffffff";
-  ctx.fillRect(sim.rig.x * scale - 2, sim.rig.y * scale - 2, 5, 5);
+    const tmp = document.createElement("canvas");
+    tmp.width = WORLD_W; tmp.height = WORLD_H;
+    tmp.getContext("2d")!.putImageData(img, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(tmp, 0, 0, WORLD_W * scale, WORLD_H * scale);
+    // stratum band dividers + labels
+    const bands: [number, string][] = [[8, "WORKS"], [12, "ROOTBED"], [108, "OLD WORKS"], [204, "BURIED MILE"], [320, "DROWNED"], [436, "RED FAULT"], [552, "GLASS CHOIR"], [668, "ENGINE DEEP"]];
+    ctx.fillStyle = "rgba(248,232,176,0.85)";
+    ctx.font = `${Math.max(9, scale * 3)}px monospace`;
+    for (const [row, label] of bands) {
+      ctx.fillRect(0, row * scale, canvas.width, 1);
+      ctx.fillText(label, 6, row * scale + 10);
+    }
+    // landmarks
+    for (const l of sim.landmarks) {
+      if (!l.discovered || l.stratum === "surface") continue;
+      ctx.fillStyle = "#f8d048";
+      ctx.fillRect(l.x * scale + scale * 2, l.y * scale + scale * 2, 4, 4);
+    }
+    // blocked markers (filterable)
+    let blocked = 0;
+    let vuln = 0;
+    for (const s of sim.blocked.sites.values()) {
+      if (s.vulnerable) vuln++;
+      else blocked++;
+      if (!showBlocked) continue;
+      if (showVulnerableOnly && !s.vulnerable) continue;
+      ctx.fillStyle = s.vulnerable ? "#5fe07a" : "#e05838";
+      ctx.fillRect(s.x * scale - 1, s.y * scale - 1, 6, 6);
+    }
+    void blocked;
+    void vuln;
+    // persisted scan overlays (tier 3+ vein outlines)
+    if (showScans) {
+      for (const o of sim.scanOverlays) {
+        ctx.strokeStyle = "#48c8b0";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(o.x * scale, o.y * scale, 10 * scale, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = "#48c8b0";
+        ctx.fillText(`${o.hits.length} veins`, o.x * scale + 4, o.y * scale - 4);
+      }
+    }
+    // death caches (corpse runs)
+    for (const dc of sim.deathCaches) {
+      ctx.fillStyle = "#b070e8";
+      ctx.fillRect(dc.x * scale - 2, dc.y * scale - 2, 6, 6);
+    }
+    // base + rig
+    ctx.fillStyle = "#d8a83c";
+    ctx.fillRect(24 * scale - 2, 7 * scale - 2, 10, 6);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(sim.rig.x * scale - 2, sim.rig.y * scale - 2, 5, 5);
+  };
+  const zoomOut = button(controls, "−", () => { scale = Math.max(1, scale - 1); draw(); }, "btn small");
+  const zoomIn = button(controls, "+", () => { scale = Math.min(6, scale + 1); draw(); }, "btn small");
+  zoomOut.setAttribute("aria-label", "Zoom map out");
+  zoomIn.setAttribute("aria-label", "Zoom map in");
+  const fBlocked = button(controls, "BLOCKED ✓", () => {
+    showBlocked = !showBlocked;
+    fBlocked.textContent = showBlocked ? "BLOCKED ✓" : "BLOCKED ✕";
+    draw();
+  }, "btn small");
+  const fVuln = button(controls, "VULNERABLE ONLY", () => {
+    showVulnerableOnly = !showVulnerableOnly;
+    fVuln.textContent = showVulnerableOnly ? "VULNERABLE ONLY ✓" : "VULNERABLE ONLY";
+    draw();
+  }, "btn small");
+  const fScans = button(controls, "SCANS ✓", () => {
+    showScans = !showScans;
+    fScans.textContent = showScans ? "SCANS ✓" : "SCANS ✕";
+    draw();
+  }, "btn small");
+  draw();
   // legend + stats
   const info = el("div", "map-info", panel);
-  el("div", "map-row", info, `◼ white — you · ◼ gold — The Works · ◼ yellow — discovered landmarks · ◼ red — blocked site (remembered) · ◼ green — NOW VULNERABLE`);
-  el("div", "map-row", info, `Depth record: ${Math.max(0, sim.stats.deepestRow - 8)}m · Strata seen: ${sim.stats.strataSeen.size}/8 · Cells destroyed: ${sim.stats.cellsDestroyed.toLocaleString()}`);
+  el("div", "map-row", info, `◼ white — you · ◼ gold — The Works · ◼ yellow — landmarks · ◼ red — blocked · ◼ green — VULNERABLE · ◼ teal — scan · ◼ purple — death cache`);
+  const nVuln = [...sim.blocked.sites.values()].filter((s) => s.vulnerable).length;
+  el("div", "map-row", info, `Depth record: ${Math.max(0, sim.stats.deepestRow - 8)}m · Strata seen: ${sim.stats.strataSeen.size}/8 · Cells: ${sim.stats.cellsDestroyed.toLocaleString()} · Blocked: ${sim.blocked.sites.size} (${nVuln} vulnerable)`);
   const legend = el("div", "map-legend", info);
   for (const st of ["surface", "rootbed", "oldworks", "buriedmile", "drownedfault", "redfault", "glasschoir", "enginedeep"]) {
-    el("div", "map-legend-row", legend, STRATA_LABEL[st]);
+    const breaks = sim.stats.perStratumBreaks[st] ?? 0;
+    el("div", "map-legend-row", legend, `${STRATA_LABEL[st]}${breaks ? ` — ${breaks.toLocaleString()} broken` : ""}`);
   }
   button(panel, "CLOSE (M / ESC)", onClose, "btn primary");
   const menuRoot = document.getElementById("menu")!;
@@ -282,6 +380,12 @@ export function openFinale(sim: GameSim, onContinue: () => void) {
     ["Geodes cracked", String(sim.stats.geodes)],
     ["Relics recovered", String(sim.rig.relics.size)],
     ["Largest chain reaction", `${sim.stats.largestChain} cells`],
+    ["Best resonance combo", `×${sim.stats.bestResonanceCombo}`],
+    ["Threats destroyed", `${sim.stats.threatsKilled} (${sim.stats.elitesKilled} elite)`],
+    ["Scans pulsed", String(sim.stats.scansPulsed)],
+    ["Charges detonated", String(sim.stats.chargesDetonated)],
+    ["Lifts taken", String(sim.stats.liftsTaken)],
+    ["Corpse runs recovered", String(sim.stats.deathsRecovered)],
     ["Marked sites conquered", String(sim.stats.markedConquered)],
     ["Time underground", `${Math.floor(sim.playtime / 60)} min`],
     ["Excavation systems installed", `${sim.rig.ownedTools + 1}/8`],
@@ -292,7 +396,29 @@ export function openFinale(sim: GameSim, onContinue: () => void) {
     el("span", "", r, k);
     el("b", "", r, v);
   }
-  button(panel, "KEEP DIGGING (free play continues)", onContinue, "btn primary");
+  // per-stratum destruction breakdown
+  el("h3", "", panel, "DESTRUCTION BY STRATUM");
+  const breakdown = el("div", "finale-breakdown", panel);
+  for (const st of ["surface", "rootbed", "oldworks", "buriedmile", "drownedfault", "redfault", "glasschoir", "enginedeep"]) {
+    const n = sim.stats.perStratumBreaks[st] ?? 0;
+    const r = el("div", "finale-row", breakdown);
+    el("span", "", r, STRATA_LABEL[st]);
+    el("b", "", r, n.toLocaleString());
+  }
+  const btnRow = el("div", "finale-btns", panel);
+  button(btnRow, "EXPORT STATS (CSV)", () => {
+    const lines = ["metric,value", ...rows.map(([k, v]) => `"${k}","${v}"`)];
+    for (const st of Object.keys(sim.stats.perStratumBreaks)) {
+      lines.push(`"breaks:${st}","${sim.stats.perStratumBreaks[st]}"`);
+    }
+    const blob = new Blob([lines.join("\n")], { type: "text/csv" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `deeper-stats-${sim.seed}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }, "btn small");
+  button(btnRow, "KEEP DIGGING (free play continues)", onContinue, "btn primary");
   const menuRoot = document.getElementById("menu")!;
   menuRoot.classList.add("open");
   menuRoot.appendChild(modal);

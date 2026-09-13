@@ -1,7 +1,7 @@
 {
   "name": "deeper",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "DEEPER \u2014 EVERYTHING EVENTUALLY BREAKS. A 2D side-view destructive mining / loot / progression game.",
   "type": "module",
   "scripts": {
@@ -10,6 +10,8 @@
     "preview": "vite preview --port 4173 --strictPort --host 0.0.0.0",
     "typecheck": "tsc --noEmit",
     "assets": "tsx tools/gen-assets.ts",
+    "assets:stats": "tsx tools/gen-assets.ts --stats",
+    "audio": "tsx tools/gen-audio.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "node tools/ensure-chromium.mjs && playwright test",

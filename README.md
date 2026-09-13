@@ -43,20 +43,24 @@ You just get absurd.
   landmarks you find)
 - **28 resources · 20 relics · 7 threat families · 26 landmarks · 22 upgrades · scanner
   tiers 0–4 · 6-stage growing surface base · museum**
-- **Explored-only map** with blocked-site memory, save/load (autosave 30 s), accessibility
-  (volumes, shake toggle, reduced motion, focus visibility, non-color-only hazards)
-- **Real generated assets**: 8 PNG sheets / 337 frames / 16 animations (byte-deterministic,
-  CI-checked) + 35 synthesized WAVs with per-tool sonic identity
+- **Explored-only map** with blocked-site memory, zoom + filters + scan overlays,
+  save/load v2 (checksum, backup slot, export/import, autosave 30 s), accessibility
+  (volumes, shake toggle, reduced motion, focus visibility, non-color-only hazards,
+  assist mode, high contrast, remappable keys, gamepad + touch support)
+- **Real generated assets**: 9 PNG sheets / 396 frames / 20 animations (byte-deterministic,
+  CI-checked, size-budgeted) + 44 synthesized WAVs with per-tool sonic identity,
+  per-stratum ambience and full interaction SFX
 
 ## Development
 
 ```bash
 npm ci
 npm run dev            # dev server (base /Deeper/)
-npm test               # 22 headless sim/unit tests (incl. the 20× power-curve gate)
+npm test               # 34 headless sim/unit tests (incl. the 20× power-curve gate)
 npm run test:e2e       # 6 Playwright scenarios (needs `npm run preview` running)
 npm run build          # production bundle
-npm run assets -- --check  # byte-verify generated art (339 files)
+npm run assets -- --check  # byte-verify generated art (399 files)
+npm run audio          # regenerate synthesized WAV bank (44 sounds)
 ```
 
 Project rules for contributors/agents: [docs/AGENTS.md](docs/AGENTS.md).

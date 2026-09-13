@@ -12,24 +12,48 @@ export class Economy {
   bus: EventBus;
   rig: Rig;
   lifetimeEarned = 0;
+  /** Cartographer bonus: +1% sell per 5 landmarks, capped at +15%. */
+  landmarksFound = 0;
+  /** Price ticker: depth-flavored variance seed (deterministic per session). */
+  tickerSeed = 1;
 
   constructor(rig: Rig, bus: EventBus) {
     this.rig = rig;
     this.bus = bus;
+    this.tickerSeed = (Date.now() ^ 0x5f3d) >>> 0;
   }
 
   refineryMul(): number {
     return 1 + 0.25 * this.rig.fx().refinery;
   }
 
+  cartographerMul(): number {
+    return 1 + Math.min(0.15, Math.floor(this.landmarksFound / 5) * 0.01);
+  }
+
+  /** Depth-flavored price variance: ±6% deterministic wobble per resource.
+   * Surface sales (depthRow <= 8) stay at list price for a stable early game;
+   * deep-cache buyers and future outposts use the ticker. */
+  tickerMul(res: string, depthRow: number): number {
+    if (depthRow <= 8) return 1;
+    let h = this.tickerSeed;
+    for (let i = 0; i < res.length; i++) h = Math.imul(h ^ res.charCodeAt(i), 2654435761);
+    h = Math.imul(h ^ depthRow, 2246822519) >>> 0;
+    return 0.94 + (h % 13) / 100;
+  }
+
   /** Sell everything in the hopper at the works. Returns money gained. */
-  sellAll(): number {
-    const mul = this.refineryMul();
+  sellAll(depthRow = 8): number {
+    const mul = this.refineryMul() * this.cartographerMul();
     let total = 0;
+    let units = 0;
     for (const [res, amount] of this.rig.cargo) {
-      total += Math.round(amount * RESOURCES[res].value * mul);
+      total += Math.round(amount * RESOURCES[res].value * mul * this.tickerMul(res, depthRow));
+      units += amount;
     }
     if (total <= 0) return 0;
+    // bulk bonus: full-hopper hauls pay 10% extra
+    if (units >= 50) total = Math.round(total * 1.1);
     this.rig.cargo.clear();
     this.rig.money += total;
     this.lifetimeEarned += total;

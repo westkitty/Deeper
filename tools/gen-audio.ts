@@ -293,6 +293,75 @@ function discoverySfx(): Float32Array {
   s.tone(0.56, 1.0, 0.3, 1568, 1560, "sine", 2);
   return s.done(0.8);
 }
+function scanSfx(): Float32Array {
+  const s = new Synth();
+  s.dur(0.7);
+  s.tone(0, 0.5, 0.6, 880, 440, "sine", 3);
+  s.tone(0.1, 0.4, 0.3, 1320, 660, "sine", 3.5);
+  return s.done(0.7);
+}
+function liftSfx(): Float32Array {
+  const s = new Synth();
+  s.dur(1.1);
+  s.tone(0, 0.9, 0.5, 90, 240, "tri", 1.2);
+  s.noise(0, 0.8, 0.25, 500, 1200);
+  s.tone(0.85, 0.2, 0.5, 660, 660, "sine", 4);
+  return s.done(0.75);
+}
+function valveSfx(): Float32Array {
+  const s = new Synth();
+  s.dur(1.0);
+  s.noise(0, 0.3, 0.6, 700, 300);
+  s.tone(0.15, 0.4, 0.5, 180, 120, "square", 4);
+  s.noise(0.4, 0.5, 0.5, 300, 900);
+  return s.done(0.8);
+}
+function relicSfx(): Float32Array {
+  const s = new Synth();
+  s.dur(1.2);
+  s.tone(0, 0.8, 0.4, 392, 392, "sine", 2);
+  s.tone(0.15, 0.8, 0.4, 523, 523, "sine", 2);
+  s.tone(0.3, 0.8, 0.35, 659, 660, "tri", 2.2);
+  return s.done(0.75);
+}
+function blueprintSfx(): Float32Array {
+  const s = new Synth();
+  s.dur(1.3);
+  const notes = [330, 415, 494, 659];
+  notes.forEach((n, i) => s.tone(i * 0.12, 0.6, 0.4, n, n, "tri", 2.5));
+  s.noise(0.5, 0.4, 0.2, 2000, 4000);
+  return s.done(0.8);
+}
+function threatWarnSfx(): Float32Array {
+  const s = new Synth();
+  s.dur(0.5);
+  s.tone(0, 0.15, 0.6, 233, 220, "square", 5);
+  s.tone(0.2, 0.15, 0.6, 233, 220, "square", 5);
+  return s.done(0.6);
+}
+function ambDeep(): Float32Array {
+  const s = new Synth();
+  s.dur(3.0);
+  s.tone(0, 2.8, 0.5, 48, 46, "sine", 0.6);
+  s.tone(0.4, 2.0, 0.25, 96, 92, "tri", 0.9);
+  s.noise(0, 2.6, 0.1, 150, 120);
+  return s.done(0.5);
+}
+function ambMagma(): Float32Array {
+  const s = new Synth();
+  s.dur(3.0);
+  s.noise(0, 2.8, 0.4, 400, 900);
+  s.tone(0, 2.8, 0.3, 60, 75, "saw", 0.7);
+  return s.done(0.5);
+}
+function ambCrystal(): Float32Array {
+  const s = new Synth();
+  s.dur(3.0);
+  s.tone(0, 2.8, 0.25, 880, 884, "sine", 0.5);
+  s.tone(0.3, 2.4, 0.2, 1320, 1312, "sine", 0.6);
+  s.tone(0.6, 2.0, 0.15, 1760, 1770, "sine", 0.7);
+  return s.done(0.45);
+}
 function stratumSfx(): Float32Array {
   const s = new Synth();
   s.dur(2.2);
@@ -375,6 +444,9 @@ const SOUND_FILES: Record<string, () => Float32Array> = {
   "water": waterSfx, "steam": steamSfx, "magma": magmaSfx, "resonance": resonanceSfx,
   "machine": machineSfx, "base_amb": baseAmb, "hurt": hurtSfx, "extract": extractSfx,
   "discovery": discoverySfx, "stratum": stratumSfx,
+  "scan": scanSfx, "lift": liftSfx, "valve": valveSfx, "relic": relicSfx,
+  "blueprint": blueprintSfx, "threat_warn": threatWarnSfx,
+  "amb_deep": ambDeep, "amb_magma": ambMagma, "amb_crystal": ambCrystal,
   "tool_auger": () => toolLoop("auger"), "tool_twin": () => toolLoop("twin"),
   "tool_hammer": () => toolLoop("hammer"), "tool_thermal": () => toolLoop("thermal"),
   "tool_seismic": () => toolLoop("seismic"), "tool_rotary": () => toolLoop("rotary"),

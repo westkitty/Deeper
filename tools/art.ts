@@ -377,9 +377,11 @@ export function buildTerrain(add: (name: string, p: Px) => void) {
     ["bedrock", "bedrock"], ["vaultwall", "vaultwall"], ["geodeshell", "geodeshell"],
   ];
   let seedBase = 101;
+  // high-traffic materials get a 4th variant for extra visual variety
+  const EXTRA_VARIANT = new Set(["soil", "stone", "basalt", "crystal", "concrete", "sandstone"]);
   for (const [key, palKey] of MAT_KEYS) {
     const base = P[palKey];
-    const variants = 3;
+    const variants = EXTRA_VARIANT.has(key) ? 4 : 3;
     for (let v = 0; v < variants; v++) {
       const p = new Px(16, 16);
       (TERRAIN_GENERATORS[key] ?? ((pp, bb, ss) => speckFill(pp, bb, ss)))(p, base, seedBase + v * 977);
@@ -387,6 +389,18 @@ export function buildTerrain(add: (name: string, p: Px) => void) {
       add(`t_${key}_${v}`, p);
     }
     seedBase += 313;
+  }
+  // ---- fossil / strata detail decals (rare inlay variety) -------------------
+  for (let v = 0; v < 3; v++) {
+    const p = new Px(16, 16);
+    const rnd = mulberry(950 + v);
+    // faint fossil spiral
+    const cx = 5 + Math.floor(rnd() * 6);
+    const cy = 5 + Math.floor(rnd() * 6);
+    p.ring(cx, cy, 3, hex("#d8cfae", 90));
+    p.ring(cx, cy, 1.6, hex("#d8cfae", 110));
+    p.set(cx, cy, hex("#d8cfae", 130));
+    add(`decal_fossil_${v}`, p);
   }
   // ---- crack overlays (shared damage states) ------------------------------
   for (let d = 0; d < 2; d++) {
@@ -446,6 +460,33 @@ export function buildTerrain(add: (name: string, p: Px) => void) {
       }
       add(`ore_${key}_${v}`, p);
     }
+  }
+  // ---- ore sparkle overlays (bright glints for rich veins) ------------------
+  for (let v = 0; v < 2; v++) {
+    const p = new Px(16, 16);
+    const rnd = mulberry(810 + v);
+    for (let i = 0; i < 4; i++) {
+      const x = 2 + Math.floor(rnd() * 12);
+      const y = 2 + Math.floor(rnd() * 12);
+      p.set(x, y, hex("#ffffff", 220));
+      p.set(x + 1, y, hex("#fff8d0", 140));
+      p.set(x, y + 1, hex("#fff8d0", 140));
+    }
+    add(`ore_sparkle_${v}`, p);
+  }
+  // bright high-tier ore variants (tungsten / quartz / voidgem pop at depth)
+  for (const [key, col] of [["tungsten", "#d8e4f0"], ["quartz", "#e8feff"], ["voidgem", "#d8a0ff"]] as const) {
+    const p = new Px(16, 16);
+    const c = hex(col);
+    const rnd = mulberry(820 + key.length * 17);
+    for (let i = 0; i < 5; i++) {
+      const x = 2 + Math.floor(rnd() * 12);
+      const y = 2 + Math.floor(rnd() * 12);
+      p.set(x, y, c);
+      p.set(x, y - 1, shade(c, 0.3));
+      p.set(x + 1, y, shade(c, -0.2));
+    }
+    add(`ore_${key}_bright`, p);
   }
   // ---- liquids --------------------------------------------------------------
   const waterCols = [hex("#2e5d6e", 190), hex("#3a708a", 190), hex("#5690a8", 200), hex("#8ec8d8", 210)];
