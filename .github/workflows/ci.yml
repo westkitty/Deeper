@@ -1,0 +1,38 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Asset validation (deterministic regeneration, byte diff)
+        run: npm run assets -- --check
+
+      - name: Unit tests + headless full-progression simulation (power-curve gate)
+        run: npx vitest run
+
+      - name: Build
+        run: npm run build
+
+      - name: Browser QA (Playwright, real Chromium via npm binary)
+        run: |
+          node tools/ensure-chromium.mjs
+          npx playwright test

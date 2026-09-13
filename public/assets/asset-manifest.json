@@ -1,0 +1,2559 @@
+{
+ "generated": "deterministic",
+ "generator": "tools/gen-assets.ts",
+ "sheets": {
+  "terrain": {
+   "file": "assets/terrain.png",
+   "size": [
+    1021,
+    52
+   ]
+  },
+  "rig": {
+   "file": "assets/rig.png",
+   "size": [
+    1014,
+    83
+   ]
+  },
+  "enemies": {
+   "file": "assets/enemies.png",
+   "size": [
+    1006,
+    43
+   ]
+  },
+  "icons": {
+   "file": "assets/icons.png",
+   "size": [
+    1021,
+    18
+   ]
+  },
+  "props": {
+   "file": "assets/props.png",
+   "size": [
+    865,
+    163
+   ]
+  },
+  "vfx": {
+   "file": "assets/vfx.png",
+   "size": [
+    375,
+    34
+   ]
+  }
+ },
+ "frames": {
+  "t_grass_0": {
+   "sheet": "terrain",
+   "x": 1,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_grass_1": {
+   "sheet": "terrain",
+   "x": 18,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_grass_2": {
+   "sheet": "terrain",
+   "x": 35,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_soil_0": {
+   "sheet": "terrain",
+   "x": 52,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_soil_1": {
+   "sheet": "terrain",
+   "x": 69,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_soil_2": {
+   "sheet": "terrain",
+   "x": 86,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_clay_0": {
+   "sheet": "terrain",
+   "x": 103,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_clay_1": {
+   "sheet": "terrain",
+   "x": 120,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_clay_2": {
+   "sheet": "terrain",
+   "x": 137,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_sandstone_0": {
+   "sheet": "terrain",
+   "x": 154,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_sandstone_1": {
+   "sheet": "terrain",
+   "x": 171,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_sandstone_2": {
+   "sheet": "terrain",
+   "x": 188,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_rootwood_0": {
+   "sheet": "terrain",
+   "x": 205,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_rootwood_1": {
+   "sheet": "terrain",
+   "x": 222,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_rootwood_2": {
+   "sheet": "terrain",
+   "x": 239,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_pipe_0": {
+   "sheet": "terrain",
+   "x": 256,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_pipe_1": {
+   "sheet": "terrain",
+   "x": 273,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_pipe_2": {
+   "sheet": "terrain",
+   "x": 290,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_sand_0": {
+   "sheet": "terrain",
+   "x": 307,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_sand_1": {
+   "sheet": "terrain",
+   "x": 324,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_sand_2": {
+   "sheet": "terrain",
+   "x": 341,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_gravel_0": {
+   "sheet": "terrain",
+   "x": 358,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_gravel_1": {
+   "sheet": "terrain",
+   "x": 375,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_gravel_2": {
+   "sheet": "terrain",
+   "x": 392,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_fill_0": {
+   "sheet": "terrain",
+   "x": 409,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_fill_1": {
+   "sheet": "terrain",
+   "x": 426,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_fill_2": {
+   "sheet": "terrain",
+   "x": 443,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_rootgold_0": {
+   "sheet": "terrain",
+   "x": 460,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_rootgold_1": {
+   "sheet": "terrain",
+   "x": 477,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_rootgold_2": {
+   "sheet": "terrain",
+   "x": 494,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_stone_0": {
+   "sheet": "terrain",
+   "x": 511,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_stone_1": {
+   "sheet": "terrain",
+   "x": 528,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_stone_2": {
+   "sheet": "terrain",
+   "x": 545,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_timber_0": {
+   "sheet": "terrain",
+   "x": 562,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_timber_1": {
+   "sheet": "terrain",
+   "x": 579,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_timber_2": {
+   "sheet": "terrain",
+   "x": 596,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_railiron_0": {
+   "sheet": "terrain",
+   "x": 613,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_railiron_1": {
+   "sheet": "terrain",
+   "x": 630,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_railiron_2": {
+   "sheet": "terrain",
+   "x": 647,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_coalrock_0": {
+   "sheet": "terrain",
+   "x": 664,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_coalrock_1": {
+   "sheet": "terrain",
+   "x": 681,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_coalrock_2": {
+   "sheet": "terrain",
+   "x": 698,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_concrete_0": {
+   "sheet": "terrain",
+   "x": 715,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_concrete_1": {
+   "sheet": "terrain",
+   "x": 732,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_concrete_2": {
+   "sheet": "terrain",
+   "x": 749,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_brick_0": {
+   "sheet": "terrain",
+   "x": 766,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_brick_1": {
+   "sheet": "terrain",
+   "x": 783,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_brick_2": {
+   "sheet": "terrain",
+   "x": 800,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_asphalt_0": {
+   "sheet": "terrain",
+   "x": 817,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_asphalt_1": {
+   "sheet": "terrain",
+   "x": 834,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_asphalt_2": {
+   "sheet": "terrain",
+   "x": 851,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_steel_0": {
+   "sheet": "terrain",
+   "x": 868,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_steel_1": {
+   "sheet": "terrain",
+   "x": 885,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_steel_2": {
+   "sheet": "terrain",
+   "x": 902,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_conduit_0": {
+   "sheet": "terrain",
+   "x": 919,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_conduit_1": {
+   "sheet": "terrain",
+   "x": 936,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_conduit_2": {
+   "sheet": "terrain",
+   "x": 953,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_tile_0": {
+   "sheet": "terrain",
+   "x": 970,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_tile_1": {
+   "sheet": "terrain",
+   "x": 987,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_tile_2": {
+   "sheet": "terrain",
+   "x": 1004,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "t_wetstone_0": {
+   "sheet": "terrain",
+   "x": 1,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_wetstone_1": {
+   "sheet": "terrain",
+   "x": 18,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_wetstone_2": {
+   "sheet": "terrain",
+   "x": 35,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_slate_0": {
+   "sheet": "terrain",
+   "x": 52,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_slate_1": {
+   "sheet": "terrain",
+   "x": 69,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_slate_2": {
+   "sheet": "terrain",
+   "x": 86,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_pressglass_0": {
+   "sheet": "terrain",
+   "x": 103,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_pressglass_1": {
+   "sheet": "terrain",
+   "x": 120,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_pressglass_2": {
+   "sheet": "terrain",
+   "x": 137,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_calcite_0": {
+   "sheet": "terrain",
+   "x": 154,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_calcite_1": {
+   "sheet": "terrain",
+   "x": 171,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_calcite_2": {
+   "sheet": "terrain",
+   "x": 188,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_basalt_0": {
+   "sheet": "terrain",
+   "x": 205,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_basalt_1": {
+   "sheet": "terrain",
+   "x": 222,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_basalt_2": {
+   "sheet": "terrain",
+   "x": 239,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_sulfurrock_0": {
+   "sheet": "terrain",
+   "x": 256,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_sulfurrock_1": {
+   "sheet": "terrain",
+   "x": 273,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_sulfurrock_2": {
+   "sheet": "terrain",
+   "x": 290,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_obsidian_0": {
+   "sheet": "terrain",
+   "x": 307,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_obsidian_1": {
+   "sheet": "terrain",
+   "x": 324,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_obsidian_2": {
+   "sheet": "terrain",
+   "x": 341,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_magmarock_0": {
+   "sheet": "terrain",
+   "x": 358,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_magmarock_1": {
+   "sheet": "terrain",
+   "x": 375,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_magmarock_2": {
+   "sheet": "terrain",
+   "x": 392,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_crystal_0": {
+   "sheet": "terrain",
+   "x": 409,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_crystal_1": {
+   "sheet": "terrain",
+   "x": 426,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_crystal_2": {
+   "sheet": "terrain",
+   "x": 443,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_darkstone_0": {
+   "sheet": "terrain",
+   "x": 460,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_darkstone_1": {
+   "sheet": "terrain",
+   "x": 477,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_darkstone_2": {
+   "sheet": "terrain",
+   "x": 494,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_gemrock_0": {
+   "sheet": "terrain",
+   "x": 511,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_gemrock_1": {
+   "sheet": "terrain",
+   "x": 528,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_gemrock_2": {
+   "sheet": "terrain",
+   "x": 545,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_composite_0": {
+   "sheet": "terrain",
+   "x": 562,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_composite_1": {
+   "sheet": "terrain",
+   "x": 579,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_composite_2": {
+   "sheet": "terrain",
+   "x": 596,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_alloy_0": {
+   "sheet": "terrain",
+   "x": 613,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_alloy_1": {
+   "sheet": "terrain",
+   "x": 630,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_alloy_2": {
+   "sheet": "terrain",
+   "x": 647,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_cpipe_0": {
+   "sheet": "terrain",
+   "x": 664,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_cpipe_1": {
+   "sheet": "terrain",
+   "x": 681,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_cpipe_2": {
+   "sheet": "terrain",
+   "x": 698,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_bulkhead_0": {
+   "sheet": "terrain",
+   "x": 715,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_bulkhead_1": {
+   "sheet": "terrain",
+   "x": 732,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_bulkhead_2": {
+   "sheet": "terrain",
+   "x": 749,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_decpanel_0": {
+   "sheet": "terrain",
+   "x": 766,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_decpanel_1": {
+   "sheet": "terrain",
+   "x": 783,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_decpanel_2": {
+   "sheet": "terrain",
+   "x": 800,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_bedrock_0": {
+   "sheet": "terrain",
+   "x": 817,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_bedrock_1": {
+   "sheet": "terrain",
+   "x": 834,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_bedrock_2": {
+   "sheet": "terrain",
+   "x": 851,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_vaultwall_0": {
+   "sheet": "terrain",
+   "x": 868,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_vaultwall_1": {
+   "sheet": "terrain",
+   "x": 885,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_vaultwall_2": {
+   "sheet": "terrain",
+   "x": 902,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_geodeshell_0": {
+   "sheet": "terrain",
+   "x": 919,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_geodeshell_1": {
+   "sheet": "terrain",
+   "x": 936,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "t_geodeshell_2": {
+   "sheet": "terrain",
+   "x": 953,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "crack_0": {
+   "sheet": "terrain",
+   "x": 970,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "crack_1": {
+   "sheet": "terrain",
+   "x": 987,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "ore_copper_0": {
+   "sheet": "terrain",
+   "x": 1004,
+   "y": 18,
+   "w": 16,
+   "h": 16
+  },
+  "ore_copper_1": {
+   "sheet": "terrain",
+   "x": 1,
+   "y": 35,
+   "w": 16,
+   "h": 16
+  },
+  "ore_coal_0": {
+   "sheet": "terrain",
+   "x": 18,
+   "y": 35,
+   "w": 16,
+   "h": 16
+  },
+  "ore_coal_1": {
+   "sheet": "terrain",
+   "x": 35,
+   "y": 35,
+   "w": 16,
+   "h": 16
+  },
+  "ore_iron_0": {
+   "sheet": "terrain",
+   "x": 52,
+   "y": 35,
+   "w": 16,
+   "h": 16
+  },
+  "ore_iron_1": {
+   "sheet": "terrain",
+   "x": 69,
+   "y": 35,
+   "w": 16,
+   "h": 16
+  },
+  "ore_silver_0": {
+   "sheet": "terrain",
+   "x": 86,
+   "y": 35,
+   "w": 16,
+   "h": 16
+  },
+  "ore_silver_1": {
+   "sheet": "terrain",
+   "x": 103,
+   "y": 35,
+   "w": 16,
+   "h": 16
+  },
+  "ore_gold_0": {
+   "sheet": "terrain",
+   "x": 120,
+   "y": 35,
+   "w": 16,
+   "h": 16
+  },
+  "ore_gold_1": {
+   "sheet": "terrain",
+   "x": 137,
+   "y": 35,
+   "w": 16,
+   "h": 16
+  },
+  "ore_tungsten_0": {
+   "sheet": "terrain",
+   "x": 154,
+   "y": 35,
+   "w": 16,
+   "h": 16
+  },
+  "ore_tungsten_1": {
+   "sheet": "terrain",
+   "x": 171,
+   "y": 35,
+   "w": 16,
+   "h": 16
+  },
+  "ore_quartz_0": {
+   "sheet": "terrain",
+   "x": 188,
+   "y": 35,
+   "w": 16,
+   "h": 16
+  },
+  "ore_quartz_1": {
+   "sheet": "terrain",
+   "x": 205,
+   "y": 35,
+   "w": 16,
+   "h": 16
+  },
+  "ore_voidgem_0": {
+   "sheet": "terrain",
+   "x": 222,
+   "y": 35,
+   "w": 16,
+   "h": 16
+  },
+  "ore_voidgem_1": {
+   "sheet": "terrain",
+   "x": 239,
+   "y": 35,
+   "w": 16,
+   "h": 16
+  },
+  "ore_nickel_0": {
+   "sheet": "terrain",
+   "x": 256,
+   "y": 35,
+   "w": 16,
+   "h": 16
+  },
+  "ore_nickel_1": {
+   "sheet": "terrain",
+   "x": 273,
+   "y": 35,
+   "w": 16,
+   "h": 16
+  },
+  "ore_amber_0": {
+   "sheet": "terrain",
+   "x": 290,
+   "y": 35,
+   "w": 16,
+   "h": 16
+  },
+  "ore_amber_1": {
+   "sheet": "terrain",
+   "x": 307,
+   "y": 35,
+   "w": 16,
+   "h": 16
+  },
+  "ore_brinepearl_0": {
+   "sheet": "terrain",
+   "x": 324,
+   "y": 35,
+   "w": 16,
+   "h": 16
+  },
+  "ore_brinepearl_1": {
+   "sheet": "terrain",
+   "x": 341,
+   "y": 35,
+   "w": 16,
+   "h": 16
+  },
+  "ore_obsshard_0": {
+   "sheet": "terrain",
+   "x": 358,
+   "y": 35,
+   "w": 16,
+   "h": 16
+  },
+  "ore_obsshard_1": {
+   "sheet": "terrain",
+   "x": 375,
+   "y": 35,
+   "w": 16,
+   "h": 16
+  },
+  "liq_water_0": {
+   "sheet": "terrain",
+   "x": 392,
+   "y": 35,
+   "w": 16,
+   "h": 16
+  },
+  "liq_water_1": {
+   "sheet": "terrain",
+   "x": 409,
+   "y": 35,
+   "w": 16,
+   "h": 16
+  },
+  "liq_water_2": {
+   "sheet": "terrain",
+   "x": 426,
+   "y": 35,
+   "w": 16,
+   "h": 16
+  },
+  "liq_magma_0": {
+   "sheet": "terrain",
+   "x": 443,
+   "y": 35,
+   "w": 16,
+   "h": 16
+  },
+  "liq_magma_1": {
+   "sheet": "terrain",
+   "x": 460,
+   "y": 35,
+   "w": 16,
+   "h": 16
+  },
+  "liq_magma_2": {
+   "sheet": "terrain",
+   "x": 477,
+   "y": 35,
+   "w": 16,
+   "h": 16
+  },
+  "liq_oil_0": {
+   "sheet": "terrain",
+   "x": 494,
+   "y": 35,
+   "w": 16,
+   "h": 16
+  },
+  "liq_oil_1": {
+   "sheet": "terrain",
+   "x": 511,
+   "y": 35,
+   "w": 16,
+   "h": 16
+  },
+  "gas_0": {
+   "sheet": "terrain",
+   "x": 528,
+   "y": 35,
+   "w": 16,
+   "h": 16
+  },
+  "gas_1": {
+   "sheet": "terrain",
+   "x": 545,
+   "y": 35,
+   "w": 16,
+   "h": 16
+  },
+  "chassis_0": {
+   "sheet": "rig",
+   "x": 1,
+   "y": 1,
+   "w": 80,
+   "h": 48
+  },
+  "chassis_1": {
+   "sheet": "rig",
+   "x": 82,
+   "y": 1,
+   "w": 80,
+   "h": 48
+  },
+  "chassis_2": {
+   "sheet": "rig",
+   "x": 163,
+   "y": 1,
+   "w": 80,
+   "h": 48
+  },
+  "tracks_0": {
+   "sheet": "rig",
+   "x": 244,
+   "y": 1,
+   "w": 80,
+   "h": 14
+  },
+  "tracks_1": {
+   "sheet": "rig",
+   "x": 325,
+   "y": 1,
+   "w": 80,
+   "h": 14
+  },
+  "tracks_2": {
+   "sheet": "rig",
+   "x": 406,
+   "y": 1,
+   "w": 80,
+   "h": 14
+  },
+  "tracks_3": {
+   "sheet": "rig",
+   "x": 487,
+   "y": 1,
+   "w": 80,
+   "h": 14
+  },
+  "lamp": {
+   "sheet": "rig",
+   "x": 568,
+   "y": 1,
+   "w": 48,
+   "h": 40
+  },
+  "cargo_full": {
+   "sheet": "rig",
+   "x": 617,
+   "y": 1,
+   "w": 18,
+   "h": 18
+  },
+  "vacuum_1": {
+   "sheet": "rig",
+   "x": 636,
+   "y": 1,
+   "w": 20,
+   "h": 20
+  },
+  "vacuum_2": {
+   "sheet": "rig",
+   "x": 657,
+   "y": 1,
+   "w": 28,
+   "h": 28
+  },
+  "charge": {
+   "sheet": "rig",
+   "x": 686,
+   "y": 1,
+   "w": 8,
+   "h": 8
+  },
+  "tool_auger_0": {
+   "sheet": "rig",
+   "x": 695,
+   "y": 1,
+   "w": 24,
+   "h": 24
+  },
+  "tool_auger_1": {
+   "sheet": "rig",
+   "x": 720,
+   "y": 1,
+   "w": 24,
+   "h": 24
+  },
+  "tool_twin_0": {
+   "sheet": "rig",
+   "x": 745,
+   "y": 1,
+   "w": 28,
+   "h": 26
+  },
+  "tool_twin_1": {
+   "sheet": "rig",
+   "x": 774,
+   "y": 1,
+   "w": 28,
+   "h": 26
+  },
+  "tool_hammer_0": {
+   "sheet": "rig",
+   "x": 803,
+   "y": 1,
+   "w": 28,
+   "h": 26
+  },
+  "tool_hammer_1": {
+   "sheet": "rig",
+   "x": 832,
+   "y": 1,
+   "w": 28,
+   "h": 26
+  },
+  "tool_thermal_0": {
+   "sheet": "rig",
+   "x": 861,
+   "y": 1,
+   "w": 28,
+   "h": 26
+  },
+  "tool_thermal_1": {
+   "sheet": "rig",
+   "x": 890,
+   "y": 1,
+   "w": 28,
+   "h": 26
+  },
+  "tool_seismic_0": {
+   "sheet": "rig",
+   "x": 919,
+   "y": 1,
+   "w": 30,
+   "h": 28
+  },
+  "tool_seismic_1": {
+   "sheet": "rig",
+   "x": 950,
+   "y": 1,
+   "w": 30,
+   "h": 28
+  },
+  "tool_rotary_0": {
+   "sheet": "rig",
+   "x": 981,
+   "y": 1,
+   "w": 32,
+   "h": 30
+  },
+  "tool_rotary_1": {
+   "sheet": "rig",
+   "x": 1,
+   "y": 50,
+   "w": 32,
+   "h": 30
+  },
+  "tool_rotary_2": {
+   "sheet": "rig",
+   "x": 34,
+   "y": 50,
+   "w": 32,
+   "h": 30
+  },
+  "tool_resonator_0": {
+   "sheet": "rig",
+   "x": 67,
+   "y": 50,
+   "w": 30,
+   "h": 28
+  },
+  "tool_resonator_1": {
+   "sheet": "rig",
+   "x": 98,
+   "y": 50,
+   "w": 30,
+   "h": 28
+  },
+  "tool_maw_0": {
+   "sheet": "rig",
+   "x": 129,
+   "y": 50,
+   "w": 36,
+   "h": 32
+  },
+  "tool_maw_1": {
+   "sheet": "rig",
+   "x": 166,
+   "y": 50,
+   "w": 36,
+   "h": 32
+  },
+  "tool_maw_2": {
+   "sheet": "rig",
+   "x": 203,
+   "y": 50,
+   "w": 36,
+   "h": 32
+  },
+  "grubble_move_0": {
+   "sheet": "enemies",
+   "x": 1,
+   "y": 1,
+   "w": 24,
+   "h": 20
+  },
+  "grubble_move_1": {
+   "sheet": "enemies",
+   "x": 26,
+   "y": 1,
+   "w": 24,
+   "h": 20
+  },
+  "grubble_attack": {
+   "sheet": "enemies",
+   "x": 51,
+   "y": 1,
+   "w": 24,
+   "h": 20
+  },
+  "grubble_hit": {
+   "sheet": "enemies",
+   "x": 76,
+   "y": 1,
+   "w": 24,
+   "h": 20
+  },
+  "grubble_death_0": {
+   "sheet": "enemies",
+   "x": 101,
+   "y": 1,
+   "w": 24,
+   "h": 20
+  },
+  "grubble_death_1": {
+   "sheet": "enemies",
+   "x": 126,
+   "y": 1,
+   "w": 24,
+   "h": 20
+  },
+  "shellsnout_move_0": {
+   "sheet": "enemies",
+   "x": 151,
+   "y": 1,
+   "w": 24,
+   "h": 20
+  },
+  "shellsnout_move_1": {
+   "sheet": "enemies",
+   "x": 176,
+   "y": 1,
+   "w": 24,
+   "h": 20
+  },
+  "shellsnout_attack": {
+   "sheet": "enemies",
+   "x": 201,
+   "y": 1,
+   "w": 24,
+   "h": 20
+  },
+  "shellsnout_hit": {
+   "sheet": "enemies",
+   "x": 226,
+   "y": 1,
+   "w": 24,
+   "h": 20
+  },
+  "shellsnout_death_0": {
+   "sheet": "enemies",
+   "x": 251,
+   "y": 1,
+   "w": 24,
+   "h": 20
+  },
+  "shellsnout_death_1": {
+   "sheet": "enemies",
+   "x": 276,
+   "y": 1,
+   "w": 24,
+   "h": 20
+  },
+  "crawler_move_0": {
+   "sheet": "enemies",
+   "x": 301,
+   "y": 1,
+   "w": 28,
+   "h": 20
+  },
+  "crawler_move_1": {
+   "sheet": "enemies",
+   "x": 330,
+   "y": 1,
+   "w": 28,
+   "h": 20
+  },
+  "crawler_attack": {
+   "sheet": "enemies",
+   "x": 359,
+   "y": 1,
+   "w": 28,
+   "h": 20
+  },
+  "crawler_hit": {
+   "sheet": "enemies",
+   "x": 388,
+   "y": 1,
+   "w": 28,
+   "h": 20
+  },
+  "crawler_death_0": {
+   "sheet": "enemies",
+   "x": 417,
+   "y": 1,
+   "w": 28,
+   "h": 20
+  },
+  "crawler_death_1": {
+   "sheet": "enemies",
+   "x": 446,
+   "y": 1,
+   "w": 28,
+   "h": 20
+  },
+  "lurker_move_0": {
+   "sheet": "enemies",
+   "x": 475,
+   "y": 1,
+   "w": 30,
+   "h": 18
+  },
+  "lurker_move_1": {
+   "sheet": "enemies",
+   "x": 506,
+   "y": 1,
+   "w": 30,
+   "h": 18
+  },
+  "lurker_attack": {
+   "sheet": "enemies",
+   "x": 537,
+   "y": 1,
+   "w": 30,
+   "h": 18
+  },
+  "lurker_hit": {
+   "sheet": "enemies",
+   "x": 568,
+   "y": 1,
+   "w": 30,
+   "h": 18
+  },
+  "lurker_death_0": {
+   "sheet": "enemies",
+   "x": 599,
+   "y": 1,
+   "w": 30,
+   "h": 18
+  },
+  "lurker_death_1": {
+   "sheet": "enemies",
+   "x": 630,
+   "y": 1,
+   "w": 30,
+   "h": 18
+  },
+  "embermite_move_0": {
+   "sheet": "enemies",
+   "x": 661,
+   "y": 1,
+   "w": 20,
+   "h": 18
+  },
+  "embermite_move_1": {
+   "sheet": "enemies",
+   "x": 682,
+   "y": 1,
+   "w": 20,
+   "h": 18
+  },
+  "embermite_attack": {
+   "sheet": "enemies",
+   "x": 703,
+   "y": 1,
+   "w": 20,
+   "h": 18
+  },
+  "embermite_hit": {
+   "sheet": "enemies",
+   "x": 724,
+   "y": 1,
+   "w": 20,
+   "h": 18
+  },
+  "embermite_death_0": {
+   "sheet": "enemies",
+   "x": 745,
+   "y": 1,
+   "w": 20,
+   "h": 18
+  },
+  "embermite_death_1": {
+   "sheet": "enemies",
+   "x": 766,
+   "y": 1,
+   "w": 20,
+   "h": 18
+  },
+  "prismite_move_0": {
+   "sheet": "enemies",
+   "x": 787,
+   "y": 1,
+   "w": 22,
+   "h": 22
+  },
+  "prismite_move_1": {
+   "sheet": "enemies",
+   "x": 810,
+   "y": 1,
+   "w": 22,
+   "h": 22
+  },
+  "prismite_attack": {
+   "sheet": "enemies",
+   "x": 833,
+   "y": 1,
+   "w": 22,
+   "h": 22
+  },
+  "prismite_hit": {
+   "sheet": "enemies",
+   "x": 856,
+   "y": 1,
+   "w": 22,
+   "h": 22
+  },
+  "prismite_death_0": {
+   "sheet": "enemies",
+   "x": 879,
+   "y": 1,
+   "w": 22,
+   "h": 22
+  },
+  "prismite_death_1": {
+   "sheet": "enemies",
+   "x": 902,
+   "y": 1,
+   "w": 22,
+   "h": 22
+  },
+  "drone_move_0": {
+   "sheet": "enemies",
+   "x": 925,
+   "y": 1,
+   "w": 26,
+   "h": 18
+  },
+  "drone_move_1": {
+   "sheet": "enemies",
+   "x": 952,
+   "y": 1,
+   "w": 26,
+   "h": 18
+  },
+  "drone_attack": {
+   "sheet": "enemies",
+   "x": 979,
+   "y": 1,
+   "w": 26,
+   "h": 18
+  },
+  "drone_hit": {
+   "sheet": "enemies",
+   "x": 1,
+   "y": 24,
+   "w": 26,
+   "h": 18
+  },
+  "drone_death_0": {
+   "sheet": "enemies",
+   "x": 28,
+   "y": 24,
+   "w": 26,
+   "h": 18
+  },
+  "drone_death_1": {
+   "sheet": "enemies",
+   "x": 55,
+   "y": 24,
+   "w": 26,
+   "h": 18
+  },
+  "res_copper": {
+   "sheet": "icons",
+   "x": 1,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "res_coal": {
+   "sheet": "icons",
+   "x": 18,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "res_iron": {
+   "sheet": "icons",
+   "x": 35,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "res_nickel": {
+   "sheet": "icons",
+   "x": 52,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "res_clay": {
+   "sheet": "icons",
+   "x": 69,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "res_hardwood": {
+   "sheet": "icons",
+   "x": 86,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "res_amber": {
+   "sheet": "icons",
+   "x": 103,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "res_railsalvage": {
+   "sheet": "icons",
+   "x": 120,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "res_aggregate": {
+   "sheet": "icons",
+   "x": 137,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "res_steel": {
+   "sheet": "icons",
+   "x": 154,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "res_conduit": {
+   "sheet": "icons",
+   "x": 171,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "res_silver": {
+   "sheet": "icons",
+   "x": 188,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "res_gold": {
+   "sheet": "icons",
+   "x": 205,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "res_tungsten": {
+   "sheet": "icons",
+   "x": 222,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "res_pressglass": {
+   "sheet": "icons",
+   "x": 239,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "res_brinepearl": {
+   "sheet": "icons",
+   "x": 256,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "res_sulfur": {
+   "sheet": "icons",
+   "x": 273,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "res_obsshard": {
+   "sheet": "icons",
+   "x": 290,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "res_quartz": {
+   "sheet": "icons",
+   "x": 307,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "res_voidgem": {
+   "sheet": "icons",
+   "x": 324,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "res_composite": {
+   "sheet": "icons",
+   "x": 341,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "res_alloy": {
+   "sheet": "icons",
+   "x": 358,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "res_coolant": {
+   "sheet": "icons",
+   "x": 375,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "res_blueprint": {
+   "sheet": "icons",
+   "x": 392,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "relic_fern": {
+   "sheet": "icons",
+   "x": 409,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "relic_trilobite": {
+   "sheet": "icons",
+   "x": 426,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "relic_ammonite": {
+   "sheet": "icons",
+   "x": 443,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "relic_urn": {
+   "sheet": "icons",
+   "x": 460,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "relic_coin": {
+   "sheet": "icons",
+   "x": 477,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "relic_watch": {
+   "sheet": "icons",
+   "x": 494,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "relic_key": {
+   "sheet": "icons",
+   "x": 511,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "relic_soldier": {
+   "sheet": "icons",
+   "x": 528,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "relic_bottle": {
+   "sheet": "icons",
+   "x": 545,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "relic_plate": {
+   "sheet": "icons",
+   "x": 562,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "relic_typewriter": {
+   "sheet": "icons",
+   "x": 579,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "relic_phone": {
+   "sheet": "icons",
+   "x": 596,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "relic_musicbox": {
+   "sheet": "icons",
+   "x": 613,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "relic_helmet": {
+   "sheet": "icons",
+   "x": 630,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "relic_doll": {
+   "sheet": "icons",
+   "x": 647,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "relic_egg": {
+   "sheet": "icons",
+   "x": 664,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "relic_gearheart": {
+   "sheet": "icons",
+   "x": 681,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "relic_memory": {
+   "sheet": "icons",
+   "x": 698,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "relic_globe": {
+   "sheet": "icons",
+   "x": 715,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "relic_badge": {
+   "sheet": "icons",
+   "x": 732,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "ui_money": {
+   "sheet": "icons",
+   "x": 749,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "ui_cargo": {
+   "sheet": "icons",
+   "x": 766,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "ui_heart": {
+   "sheet": "icons",
+   "x": 783,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "ui_scanner": {
+   "sheet": "icons",
+   "x": 800,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "ui_depth": {
+   "sheet": "icons",
+   "x": 817,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "ui_marker": {
+   "sheet": "icons",
+   "x": 834,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "ui_charge": {
+   "sheet": "icons",
+   "x": 851,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "ui_core": {
+   "sheet": "icons",
+   "x": 868,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "ui_map": {
+   "sheet": "icons",
+   "x": 885,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "ui_lift": {
+   "sheet": "icons",
+   "x": 902,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "ui_temp": {
+   "sheet": "icons",
+   "x": 919,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "ui_press": {
+   "sheet": "icons",
+   "x": 936,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "ui_shield": {
+   "sheet": "icons",
+   "x": 953,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "ui_drill": {
+   "sheet": "icons",
+   "x": 970,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "ui_skull": {
+   "sheet": "icons",
+   "x": 987,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "ui_star": {
+   "sheet": "icons",
+   "x": 1004,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "prop_pipe_h": {
+   "sheet": "props",
+   "x": 1,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "prop_pipe_v": {
+   "sheet": "props",
+   "x": 18,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "prop_rail": {
+   "sheet": "props",
+   "x": 35,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "prop_cable": {
+   "sheet": "props",
+   "x": 52,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "prop_vent": {
+   "sheet": "props",
+   "x": 69,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "prop_pump": {
+   "sheet": "props",
+   "x": 86,
+   "y": 1,
+   "w": 32,
+   "h": 32
+  },
+  "prop_valve": {
+   "sheet": "props",
+   "x": 119,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "prop_liftcar": {
+   "sheet": "props",
+   "x": 136,
+   "y": 1,
+   "w": 32,
+   "h": 40
+  },
+  "prop_liftrail": {
+   "sheet": "props",
+   "x": 169,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "prop_machine": {
+   "sheet": "props",
+   "x": 186,
+   "y": 1,
+   "w": 16,
+   "h": 48
+  },
+  "prop_bulkhead": {
+   "sheet": "props",
+   "x": 203,
+   "y": 1,
+   "w": 32,
+   "h": 32
+  },
+  "prop_crystal_0": {
+   "sheet": "props",
+   "x": 236,
+   "y": 1,
+   "w": 16,
+   "h": 24
+  },
+  "prop_crystal_1": {
+   "sheet": "props",
+   "x": 253,
+   "y": 1,
+   "w": 16,
+   "h": 24
+  },
+  "prop_fossil": {
+   "sheet": "props",
+   "x": 270,
+   "y": 1,
+   "w": 16,
+   "h": 16
+  },
+  "prop_sign": {
+   "sheet": "props",
+   "x": 287,
+   "y": 1,
+   "w": 12,
+   "h": 12
+  },
+  "base_shack": {
+   "sheet": "props",
+   "x": 300,
+   "y": 1,
+   "w": 48,
+   "h": 36
+  },
+  "base_workshop": {
+   "sheet": "props",
+   "x": 349,
+   "y": 1,
+   "w": 64,
+   "h": 44
+  },
+  "base_refinery": {
+   "sheet": "props",
+   "x": 414,
+   "y": 1,
+   "w": 80,
+   "h": 52
+  },
+  "base_machinebay": {
+   "sheet": "props",
+   "x": 495,
+   "y": 1,
+   "w": 96,
+   "h": 48
+  },
+  "base_freight": {
+   "sheet": "props",
+   "x": 592,
+   "y": 1,
+   "w": 56,
+   "h": 96
+  },
+  "base_campus": {
+   "sheet": "props",
+   "x": 649,
+   "y": 1,
+   "w": 160,
+   "h": 72
+  },
+  "prop_museum": {
+   "sheet": "props",
+   "x": 810,
+   "y": 1,
+   "w": 24,
+   "h": 20
+  },
+  "prop_fence": {
+   "sheet": "props",
+   "x": 835,
+   "y": 1,
+   "w": 16,
+   "h": 20
+  },
+  "prop_lamp": {
+   "sheet": "props",
+   "x": 852,
+   "y": 1,
+   "w": 12,
+   "h": 36
+  },
+  "bg_hills": {
+   "sheet": "props",
+   "x": 1,
+   "y": 98,
+   "w": 256,
+   "h": 64
+  },
+  "bg_cloud": {
+   "sheet": "props",
+   "x": 258,
+   "y": 98,
+   "w": 48,
+   "h": 16
+  },
+  "vfx_dust_0": {
+   "sheet": "vfx",
+   "x": 1,
+   "y": 1,
+   "w": 10,
+   "h": 10
+  },
+  "vfx_dust_1": {
+   "sheet": "vfx",
+   "x": 12,
+   "y": 1,
+   "w": 10,
+   "h": 10
+  },
+  "vfx_dust_2": {
+   "sheet": "vfx",
+   "x": 23,
+   "y": 1,
+   "w": 10,
+   "h": 10
+  },
+  "vfx_chunk_0": {
+   "sheet": "vfx",
+   "x": 34,
+   "y": 1,
+   "w": 6,
+   "h": 6
+  },
+  "vfx_chunk_1": {
+   "sheet": "vfx",
+   "x": 41,
+   "y": 1,
+   "w": 6,
+   "h": 6
+  },
+  "vfx_chunk_2": {
+   "sheet": "vfx",
+   "x": 48,
+   "y": 1,
+   "w": 6,
+   "h": 6
+  },
+  "vfx_spark": {
+   "sheet": "vfx",
+   "x": 55,
+   "y": 1,
+   "w": 6,
+   "h": 6
+  },
+  "vfx_splash": {
+   "sheet": "vfx",
+   "x": 62,
+   "y": 1,
+   "w": 8,
+   "h": 8
+  },
+  "vfx_steam_0": {
+   "sheet": "vfx",
+   "x": 71,
+   "y": 1,
+   "w": 14,
+   "h": 14
+  },
+  "vfx_steam_1": {
+   "sheet": "vfx",
+   "x": 86,
+   "y": 1,
+   "w": 14,
+   "h": 14
+  },
+  "vfx_steam_2": {
+   "sheet": "vfx",
+   "x": 101,
+   "y": 1,
+   "w": 14,
+   "h": 14
+  },
+  "vfx_fire_0": {
+   "sheet": "vfx",
+   "x": 116,
+   "y": 1,
+   "w": 10,
+   "h": 14
+  },
+  "vfx_fire_1": {
+   "sheet": "vfx",
+   "x": 127,
+   "y": 1,
+   "w": 10,
+   "h": 14
+  },
+  "vfx_fire_2": {
+   "sheet": "vfx",
+   "x": 138,
+   "y": 1,
+   "w": 10,
+   "h": 14
+  },
+  "vfx_explosion_0": {
+   "sheet": "vfx",
+   "x": 149,
+   "y": 1,
+   "w": 32,
+   "h": 32
+  },
+  "vfx_explosion_1": {
+   "sheet": "vfx",
+   "x": 182,
+   "y": 1,
+   "w": 32,
+   "h": 32
+  },
+  "vfx_explosion_2": {
+   "sheet": "vfx",
+   "x": 215,
+   "y": 1,
+   "w": 32,
+   "h": 32
+  },
+  "vfx_explosion_3": {
+   "sheet": "vfx",
+   "x": 248,
+   "y": 1,
+   "w": 32,
+   "h": 32
+  },
+  "vfx_gas_0": {
+   "sheet": "vfx",
+   "x": 281,
+   "y": 1,
+   "w": 12,
+   "h": 12
+  },
+  "vfx_gas_1": {
+   "sheet": "vfx",
+   "x": 294,
+   "y": 1,
+   "w": 12,
+   "h": 12
+  },
+  "vfx_shard": {
+   "sheet": "vfx",
+   "x": 307,
+   "y": 1,
+   "w": 8,
+   "h": 8
+  },
+  "vfx_sparkle": {
+   "sheet": "vfx",
+   "x": 316,
+   "y": 1,
+   "w": 8,
+   "h": 8
+  },
+  "vfx_streak": {
+   "sheet": "vfx",
+   "x": 325,
+   "y": 1,
+   "w": 16,
+   "h": 4
+  },
+  "vfx_smoke_0": {
+   "sheet": "vfx",
+   "x": 342,
+   "y": 1,
+   "w": 10,
+   "h": 10
+  },
+  "vfx_smoke_1": {
+   "sheet": "vfx",
+   "x": 353,
+   "y": 1,
+   "w": 10,
+   "h": 10
+  },
+  "vfx_debris": {
+   "sheet": "vfx",
+   "x": 364,
+   "y": 1,
+   "w": 10,
+   "h": 10
+  }
+ },
+ "animations": {
+  "tool_auger": {
+   "sheet": "rig",
+   "frames": [
+    "tool_auger_0",
+    "tool_auger_1"
+   ],
+   "fps": 6,
+   "loop": true
+  },
+  "tool_twin": {
+   "sheet": "rig",
+   "frames": [
+    "tool_twin_0",
+    "tool_twin_1"
+   ],
+   "fps": 12,
+   "loop": true
+  },
+  "tool_hammer": {
+   "sheet": "rig",
+   "frames": [
+    "tool_hammer_0",
+    "tool_hammer_1"
+   ],
+   "fps": 12,
+   "loop": true
+  },
+  "tool_thermal": {
+   "sheet": "rig",
+   "frames": [
+    "tool_thermal_0",
+    "tool_thermal_1"
+   ],
+   "fps": 12,
+   "loop": true
+  },
+  "tool_seismic": {
+   "sheet": "rig",
+   "frames": [
+    "tool_seismic_0",
+    "tool_seismic_1"
+   ],
+   "fps": 12,
+   "loop": true
+  },
+  "tool_rotary": {
+   "sheet": "rig",
+   "frames": [
+    "tool_rotary_0",
+    "tool_rotary_1",
+    "tool_rotary_2"
+   ],
+   "fps": 12,
+   "loop": true
+  },
+  "tool_resonator": {
+   "sheet": "rig",
+   "frames": [
+    "tool_resonator_0",
+    "tool_resonator_1"
+   ],
+   "fps": 12,
+   "loop": true
+  },
+  "tool_maw": {
+   "sheet": "rig",
+   "frames": [
+    "tool_maw_0",
+    "tool_maw_1",
+    "tool_maw_2"
+   ],
+   "fps": 12,
+   "loop": true
+  },
+  "tracks_drive": {
+   "sheet": "rig",
+   "frames": [
+    "tracks_0",
+    "tracks_1",
+    "tracks_2",
+    "tracks_3"
+   ],
+   "fps": 10,
+   "loop": true
+  },
+  "grubble_move": {
+   "sheet": "enemies",
+   "frames": [
+    "grubble_move_0",
+    "grubble_move_1"
+   ],
+   "fps": 5,
+   "loop": true
+  },
+  "shellsnout_move": {
+   "sheet": "enemies",
+   "frames": [
+    "shellsnout_move_0",
+    "shellsnout_move_1"
+   ],
+   "fps": 5,
+   "loop": true
+  },
+  "crawler_move": {
+   "sheet": "enemies",
+   "frames": [
+    "crawler_move_0",
+    "crawler_move_1"
+   ],
+   "fps": 5,
+   "loop": true
+  },
+  "lurker_move": {
+   "sheet": "enemies",
+   "frames": [
+    "lurker_move_0",
+    "lurker_move_1"
+   ],
+   "fps": 5,
+   "loop": true
+  },
+  "embermite_move": {
+   "sheet": "enemies",
+   "frames": [
+    "embermite_move_0",
+    "embermite_move_1"
+   ],
+   "fps": 5,
+   "loop": true
+  },
+  "prismite_move": {
+   "sheet": "enemies",
+   "frames": [
+    "prismite_move_0",
+    "prismite_move_1"
+   ],
+   "fps": 5,
+   "loop": true
+  },
+  "drone_move": {
+   "sheet": "enemies",
+   "frames": [
+    "drone_move_0",
+    "drone_move_1"
+   ],
+   "fps": 5,
+   "loop": true
+  }
+ }
+}

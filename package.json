@@ -1,0 +1,35 @@
+{
+  "name": "deeper",
+  "private": true,
+  "version": "1.0.0",
+  "description": "DEEPER \u2014 EVERYTHING EVENTUALLY BREAKS. A 2D side-view destructive mining / loot / progression game.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --port 4173 --strictPort --host 0.0.0.0",
+    "typecheck": "tsc --noEmit",
+    "assets": "tsx tools/gen-assets.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "node tools/ensure-chromium.mjs && playwright test",
+    "ci": "npm run typecheck && npm run assets -- --check && npm test && npm run build"
+  },
+  "dependencies": {
+    "phaser": "4.2.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@sparticuz/chromium": "^153.0.0",
+    "@types/node": "^22.20.2",
+    "@types/pngjs": "^6.0.5",
+    "brotli": "^1.3.3",
+    "playwright": "^1.63.0",
+    "playwright-core": "^1.63.0",
+    "pngjs": "^7.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "~5.9.2",
+    "vite": "^7.1.0",
+    "vitest": "^3.2.4"
+  }
+}
