@@ -13,7 +13,7 @@ import type { GameSim } from "./game";
 import { log } from "../log";
 
 export interface SaveData {
-  v: 1 | 2;
+  v: 1 | 2 | 3;
   seed: number;
   playtime: number;
   world: ReturnType<GameSim["serializeWorld"]>;
@@ -35,6 +35,8 @@ export interface SaveData {
   savedAt?: number;
   assistMode?: boolean;
   deathCaches?: { x: number; y: number; cargo: [string, number][] }[];
+  /** v3 fields */
+  aftermath?: { x: number; y: number; kind: string; tick: number; tier?: number }[];
 }
 
 const BACKUP_KEY = `${SAVE_KEY}.backup`;
@@ -55,6 +57,11 @@ function migrate(raw: SaveData): SaveData {
     raw.savedAt = Date.now();
     raw.assistMode = false;
     raw.deathCaches = [];
+  }
+  if (raw.v === 2) {
+    log.info("save", "migrating v2 save to v3");
+    raw.v = 3;
+    (raw as any).aftermath = [];
   }
   return raw;
 }

@@ -3,7 +3,7 @@
 export type SimEvent =
   | { type: "dig"; x: number; y: number; mat: number; broke: boolean; tool: number }
   | { type: "break"; x: number; y: number; mat: number; count: number; chain?: boolean }
-  | { type: "pickup"; res: string; amount: number; x: number; y: number }
+  | { type: "pickup"; res: string; amount: number; x: number; y: number; vacuum?: boolean }
   | { type: "cargoFull" }
   | { type: "sell"; money: number }
   | { type: "explode"; x: number; y: number; radius: number; big: boolean }
@@ -13,7 +13,7 @@ export type SimEvent =
   | { type: "drillHit"; x: number; y: number; mat: number; effective: boolean; toolTier: number }
   | { type: "blocked"; x: number; y: number; mat: number; toolTier: number }
   | { type: "blockedMarked"; x: number; y: number; mat: number }
-  | { type: "nowVulnerable"; count: number }
+  | { type: "nowVulnerable"; count: number; details?: { x: number; y: number; mat: number; requiredTier: number }[] }
   | { type: "landmarkRevealed"; key: string; name: string; x: number; y: number; wow?: string }
   | { type: "stratumRevealed"; stratum: string }
   | { type: "hurt"; amount: number; cause: string }
@@ -32,13 +32,26 @@ export type SimEvent =
   | { type: "threatDeath"; id: number; x: number; y: number; family: string; elite?: boolean }
   | { type: "geode"; x: number; y: number }
   | { type: "motherlode"; x: number; y: number }
-  | { type: "wow"; key: string };
+  | { type: "wow"; key: string }
+  // v1.2 additions
+  | { type: "overheat"; tier: number }
+  | { type: "overheatEnd" }
+  | { type: "digRecoil"; recoil: number; tier: number }
+  | { type: "jump"; tier: number; weight: number }
+  | { type: "heavyLanding"; tier: number; x: number; y: number }
+  | { type: "landing"; impact: number; tier: number; weight: number }
+  | { type: "pressureRelease"; x: number; y: number; force: number }
+  | { type: "aftermath"; x: number; y: number; kind: string; tier?: number }
+  | { type: "hazardWarn"; kind: string; x: number; y: number; severity: number }
+  | { type: "threatSteal"; id: number; res: string; amount: number }
+  | { type: "crystalStabilize"; x: number; y: number }
+  | { type: "drain"; x: number; y: number }
+  | { type: "flood"; x: number; y: number };
 
 export type SimListener = (e: SimEvent) => void;
 
 export class EventBus {
   private listeners: SimListener[] = [];
-  /** Ring-buffer event log for diagnostics, e2e hooks and post-mortem dumps. */
   private log: { t: number; e: SimEvent }[] = [];
   private logCap = 256;
   private counts = new Map<string, number>();
@@ -55,7 +68,6 @@ export class EventBus {
     this.counts.set(e.type, (this.counts.get(e.type) ?? 0) + 1);
     for (const fn of this.listeners) fn(e);
   }
-  /** Last N events (newest last) for diagnostics overlay / QA hook. */
   recent(n = 12): SimEvent[] {
     return this.log.slice(-n).map((r) => r.e);
   }

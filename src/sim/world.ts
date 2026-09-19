@@ -246,6 +246,36 @@ export class World {
       this.dirtyChunks.add(this.chunkOf(x, y));
     }
   }
+
+  /** Compact destruction history: drop edited entries that are redundant AIR with no ore/damage. */
+  compactEdited(keepRadius: number, px: number, py: number): number {
+    let removed = 0;
+    const r2 = keepRadius * keepRadius;
+    for (const i of [...this.edited]) {
+      if (this.tiles[i] !== M.AIR) continue;
+      if (this.ore[i] !== 0) continue;
+      if (this.damage[i] !== 0) continue;
+      const x = i % this.w; const y = (i / this.w) | 0;
+      const dx = x - px; const dy = y - py;
+      if (dx * dx + dy * dy < r2) continue; // keep near player
+      this.edited.delete(i);
+      removed++;
+      if (removed > 512) break; // budget per call
+    }
+    return removed;
+  }
+
+  /** Long-session safety: cap dirtyChunks size, drop oldest if too many. */
+  capDirtyChunks(max = 64) {
+    if (this.dirtyChunks.size <= max) return 0;
+    let dropped = 0;
+    for (const c of this.dirtyChunks) {
+      if (this.dirtyChunks.size <= max) break;
+      this.dirtyChunks.delete(c);
+      dropped++;
+    }
+    return dropped;
+  }
 }
 
 /** Ore overlay keys — index = world.ore value - 1. */

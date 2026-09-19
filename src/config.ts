@@ -107,12 +107,12 @@ export const CONTROLS = [
 ] as const;
 
 /**
- * Central balance table (iteration 1).
+ * Central balance table (iteration 2 — destructive world expansion).
  * All gameplay tuning knobs live here so balance passes touch one file.
  * Exported for the workshop UI, diagnostics overlay, and unit tests.
  */
 export const BALANCE = {
-  version: 2,
+  version: 3,
   sellBulkBonusThreshold: 50,
   sellBulkBonusMul: 1.1,
   cartographerBonusPer5: 0.01,
@@ -134,6 +134,18 @@ export const BALANCE = {
   chargePreviewRadius: 3.4,
   scanPersistSeconds: 25,
   tutorialCooldown: 6,
+  // v1.2 new
+  aftermathCap: 4096,
+  steamDamage: 3.5,
+  steamDuration: 90,
+  heatOverheatPenalty: 1.6,
+  threatCullDist: 80,
+  maxThreats: 9,
+  mawScarChance: 0.85,
+  thermalScarChance: 0.4,
+  seismicDestabilizeRadius: 3.4,
+  crystalStabilizeChance: 0.15,
+  pressureReleaseForce: 18,
 } as const;
 
 /** Stratum depth table for HUD progress + map ruler (authoritative). */
@@ -148,5 +160,5 @@ export const STRATUM_DEPTHS: { id: StratumId; startRow: number; label: string }[
   { id: "enginedeep", startRow: STRATA_START.enginedeep, label: "ENGINE DEEP" },
 ];
 
-/** Save format version (v2 adds checksum + backup + new progression fields). */
-export const SAVE_VERSION = 2;
+/** Save format version (v3 adds aftermath + heat/recoil + new threats). */
+export const SAVE_VERSION = 3;

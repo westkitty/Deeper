@@ -4,6 +4,10 @@
  * thermal-shock steam fractures, explosions and crystal resonance.
  * Deterministic given the same world state, active box and tick order.
  * Only cells inside the active box are simulated each tick.
+ * v1.2: compositional hazard interactions — water cools magma→steam (dangerous),
+ * fire ignites gas/oil, explosions destabilize granular, pressure pockets release force,
+ * crystal resonance propagates through compatible crystal, coolant mitigates thermal risks.
+ * Persistent aftermath recorded via onAftermath hook.
  */
 
 import { WORLD_H, WORLD_W } from "../config";
@@ -32,9 +36,13 @@ export class EnvSim {
   fires: { x: number; y: number; life: number }[] = [];
   /** Resonance fractures staged over time for the visible cascade. */
   pendingFractures: { x: number; y: number; delay: number }[] = [];
-  stats = { steam: 0, explosions: 0, resonated: 0, drained: 0 };
+  /** Steam transient: dangerous hot steam cells that hurt rig briefly */
+  steamCells: { x: number; y: number; life: number }[] = [];
+  stats = { steam: 0, explosions: 0, resonated: 0, drained: 0, cooled: 0, burnedGas: 0, burnedOil: 0, collapsed: 0, pressureReleases: 0 };
   /** Perf metrics for diagnostics overlay. */
   metrics = { lastMs: 0, overBudgetTicks: 0, spills: 0, preheated: 0 };
+  /** Aftermath hook wired by GameSim */
+  onAftermath?: (x: number, y: number, kind: string, tier?: number) => void;
 
   constructor(world: World, bus: EventBus, opts: EnvOptions = {}) {
     this.world = world;
@@ -58,7 +66,6 @@ export class EnvSim {
   step(tick: number) {
     const t0 = performance.now();
     const w = this.world;
-    // magma pre-heat: stone adjacent to magma softens 10% (capped, throttled)
     if (tick % 30 === 0) this.stepPreheat();
     // fires
     for (let f = this.fires.length - 1; f >= 0; f--) {
@@ -66,10 +73,13 @@ export class EnvSim {
       fire.life -= 1;
       const i = fire.x + fire.y * w.w;
       if (w.inBounds(fire.x, fire.y)) {
-        // ignite gas
+        // ignite gas — compositional: fire + gas = explosion
         if (w.gas[i] >= 3) {
           this.explode(fire.x, fire.y, 3.2, 90);
           w.gas[i] = 0;
+          this.stats.burnedGas++;
+          this.onAftermath?.(fire.x, fire.y, "burnedGas");
+          this.bus.emit({ type: "hazardWarn", kind: "gas_ignite", x: fire.x, y: fire.y, severity: 2 });
         }
         // burn flammable terrain
         const t = w.tiles[i];
@@ -78,18 +88,44 @@ export class EnvSim {
           w.set(fire.x, fire.y, M.AIR);
           this.breakTerrain(fire.x, fire.y, t, false);
           fire.life -= 20;
+          this.onAftermath?.(fire.x, fire.y, "burnedOil");
         }
-        // spread to adjacent flammables / oil
+        // spread to adjacent flammables / oil — compositional: oil fire spreads
         if (this.rng.chance(0.08)) {
           const dx = this.rng.int(-1, 2);
           const dy = this.rng.int(-1, 2);
-          const j = fire.x + dx + (fire.y + dy) * w.w;
-          if (w.inBounds(fire.x + dx, fire.y + dy) && (mat(w.tiles[j]).flammable || (w.liquid[j] === LIQ_OIL))) {
-            this.ignite(fire.x + dx, fire.y + dy);
+          const nx = fire.x + dx;
+          const ny = fire.y + dy;
+          const j = nx + ny * w.w;
+          if (w.inBounds(nx, ny)) {
+            const matJ = mat(w.tiles[j]);
+            if (matJ.flammable || w.liquid[j] === LIQ_OIL) {
+              this.ignite(nx, ny);
+              if (w.liquid[j] === LIQ_OIL) {
+                this.stats.burnedOil++;
+                this.onAftermath?.(nx, ny, "burnedOil");
+                // oil fire creates more fire spread
+                if (this.rng.chance(0.3)) {
+                  this.explode(nx, ny, 2.5, 70);
+                }
+              }
+            }
+            // gas adjacent also ignites
+            if (w.gas[j] >= 2 && this.rng.chance(0.4)) {
+              this.explode(nx, ny, 3.0, 80);
+              w.gas[j] = 0;
+              this.stats.burnedGas++;
+              this.onAftermath?.(nx, ny, "burnedGas");
+            }
           }
         }
       }
       if (fire.life <= 0) this.fires.splice(f, 1);
+    }
+    // steam transient decay
+    for (let s = this.steamCells.length - 1; s >= 0; s--) {
+      this.steamCells[s].life -= 1;
+      if (this.steamCells[s].life <= 0) this.steamCells.splice(s, 1);
     }
     // staged resonance fractures
     for (let k = this.pendingFractures.length - 1; k >= 0; k--) {
@@ -97,12 +133,15 @@ export class EnvSim {
       f.delay -= 1;
       if (f.delay <= 0) {
         this.pendingFractures.splice(k, 1);
-        const t = w.tiles[f.x + f.y * w.w];
+        const idx = f.x + f.y * w.w;
+        const t = w.tiles[idx];
         if (t !== M.AIR && t !== M.BEDROCK) {
-          const d = mat(t);
           w.set(f.x, f.y, M.AIR);
           this.breakTerrain(f.x, f.y, t, true);
           this.stats.resonated++;
+          if (mat(t).resonant || mat(t).conductive) {
+            this.onAftermath?.(f.x, f.y, "crystalFracture");
+          }
         }
       }
     }
@@ -114,7 +153,7 @@ export class EnvSim {
     if (ms > this.msBudget) this.metrics.overBudgetTicks++;
   }
 
-  /** Magma pre-heat: adjacent dense stone takes small pre-damage (softens ~10%). */
+  /** Magma pre-heat: adjacent dense stone takes small pre-damage (softens ~10%). Coolant mitigates. */
   private stepPreheat() {
     const w = this.world;
     const { x0, y0, x1, y1 } = this.box;
@@ -132,7 +171,6 @@ export class EnvSim {
           if (t === M.AIR || t === M.BEDROCK) continue;
           const d = mat(t);
           if (d.family !== "dense" && d.family !== "brittle") continue;
-          // cap pre-damage at 10% of HP so magma never auto-breaks
           if (w.damage[ni] < d.hp * 0.1) {
             w.damage[ni] = Math.min(Math.floor(d.hp * 0.1), w.damage[ni] + 2);
             n++;
@@ -151,9 +189,8 @@ export class EnvSim {
     if (!w.inBounds(cx, cy)) return [0, 0];
     const i = cx + cy * w.w;
     if (w.liquid[i] !== LIQ_WATER || w.liqLevel[i] < 5) return [0, 0];
-    // flow direction: toward lower neighbouring level
     let bx = 0;
-    let by = 1; // waterlogs drag down by default
+    let by = 1;
     let best = w.liqLevel[i];
     for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1]] as const) {
       const nx = cx + dx;
@@ -165,6 +202,14 @@ export class EnvSim {
     }
     const force = 14 * (w.liqLevel[i] / 8);
     return [bx * force, by * force];
+  }
+
+  /** Dangerous steam check: is rig near hot steam? */
+  steamHazardAt(x: number, y: number, radius = 2.5): boolean {
+    for (const s of this.steamCells) {
+      if (Math.hypot(s.x - x, s.y - y) <= radius) return true;
+    }
+    return false;
   }
 
   // -------------------------------------------------------------------------
@@ -179,10 +224,14 @@ export class EnvSim {
         if (liq === LIQ_NONE) continue;
         budget--;
         if (absorbCheck(x, y)) {
+          if (liq === LIQ_WATER) {
+            this.onAftermath?.(x, y, "drained");
+          }
           w.liquid[i] = LIQ_NONE;
           w.liqLevel[i] = 0;
           w.liqSrc[i] = 0;
           this.stats.drained++;
+          this.bus.emit({ type: "drain", x, y });
           continue;
         }
         const isMagma = liq === LIQ_MAGMA;
@@ -190,7 +239,6 @@ export class EnvSim {
         if (isMagma && tick % 3 !== 0) continue;
         if (isOil && tick % 2 !== 0) continue;
         let level = w.liqLevel[i];
-        // sources sustain themselves
         if (w.liqSrc[i] && tick % 30 === 0 && level < 8) {
           level = 8;
           w.liqLevel[i] = 8;
@@ -206,7 +254,7 @@ export class EnvSim {
           if (absorbCheck(j % w.w, (j / w.w) | 0)) return true;
           return w.liquid[j] === LIQ_NONE || w.liquid[j] === liq;
         };
-        // magma + water interaction → steam + thermal fracture
+        // magma + water interaction → steam + thermal fracture (compositional hazard)
         if (isMagma) {
           const nb = [i - 1, i + 1, i - w.w, below];
           for (const j of nb) {
@@ -216,33 +264,63 @@ export class EnvSim {
               if (w.liqLevel[j] === 0 && !w.liqSrc[j]) w.liquid[j] = LIQ_NONE;
               w.liqLevel[i] = Math.max(1, level - 1);
               level = w.liqLevel[i];
-              this.bus.emit({ type: "steam", x: j % w.w, y: (j / w.w) | 0 });
+              const sx = j % w.w;
+              const sy = (j / w.w) | 0;
+              this.bus.emit({ type: "steam", x: sx, y: sy });
+              this.steamCells.push({ x: sx, y: sy, life: 90 });
               this.stats.steam++;
-              // thermal shock fractures brittle neighbours of the steam
+              this.bus.emit({ type: "hazardWarn", kind: "steam", x: sx, y: sy, severity: 2 });
+              // thermal shock fractures brittle neighbours
               if (this.rng.chance(0.4)) {
-                const sx = (j % w.w) + this.rng.int(-1, 2);
-                const sy = ((j / w.w) | 0) + this.rng.int(-1, 2);
-                const t = w.tiles[sx + sy * w.w];
-                if (t !== M.AIR && t !== M.BEDROCK && mat(t).family === "brittle") {
-                  w.addDamage(sx, sy, 120);
-                  if (w.damage[sx + sy * w.w] >= mat(t).hp) {
-                    w.set(sx, sy, M.AIR);
-                    this.breakTerrain(sx, sy, t, false);
+                const fx = sx + this.rng.int(-1, 2);
+                const fy = sy + this.rng.int(-1, 2);
+                if (w.inBounds(fx, fy)) {
+                  const t = w.tiles[fx + fy * w.w];
+                  if (t !== M.AIR && t !== M.BEDROCK && mat(t).family === "brittle") {
+                    w.addDamage(fx, fy, 120);
+                    if (w.damage[fx + fy * w.w] >= mat(t).hp) {
+                      w.set(fx, fy, M.AIR);
+                      this.breakTerrain(fx, fy, t, false);
+                      this.onAftermath?.(fx, fy, "thermalScar");
+                    }
                   }
                 }
               }
             } else if (w.gas[j] >= 3) {
+              // magma ignites gas
               this.explode(j % w.w, (j / w.w) | 0, 3.2, 90);
               w.gas[j] = 0;
+              this.stats.burnedGas++;
+              this.onAftermath?.(j % w.w, (j / w.w) | 0, "burnedGas");
+              this.bus.emit({ type: "hazardWarn", kind: "gas_ignite", x: j % w.w, y: (j / w.w) | 0, severity: 3 });
+            } else if (w.liquid[j] === LIQ_OIL) {
+              // magma ignites oil
+              this.ignite(j % w.w, (j / w.w) | 0);
+              this.stats.burnedOil++;
+              this.onAftermath?.(j % w.w, (j / w.w) | 0, "burnedOil");
             }
           }
-          // magma cools to stone next to plenty of water
+          // magma cools to stone next to plenty of water — persistent aftermath: cooled magma region
           if (w.liquid[below] === LIQ_WATER && this.rng.chance(0.02)) {
             w.liquid[i] = LIQ_NONE;
             w.liqLevel[i] = 0;
             w.liqSrc[i] = 0;
             w.set(x, y, M.BASALT);
+            this.stats.cooled++;
+            this.onAftermath?.(x, y, "cooledMagma");
+            this.bus.emit({ type: "aftermath", x, y, kind: "cooledMagma" });
             continue;
+          }
+        }
+        // oil + fire interaction already handled in fire loop, but also oil near magma ignites
+        if (isOil) {
+          const nb = [i - 1, i + 1, i - w.w, below];
+          for (const j of nb) {
+            if (j < 0 || j >= w.tiles.length) continue;
+            if (w.liquid[j] === LIQ_MAGMA || this.fires.some((f) => f.x === (j % w.w) && f.y === ((j / w.w) | 0))) {
+              this.ignite(x, y);
+              break;
+            }
           }
         }
         // flow down
@@ -256,11 +334,14 @@ export class EnvSim {
             w.liqLevel[i] = level;
             if (w.liqSrc[i]) w.liqLevel[i] = Math.max(w.liqLevel[i], 6);
             w.dirtyChunks.add(w.chunkOf(x, y + 1));
+            if (liq === LIQ_WATER && !isMagma) {
+              this.onAftermath?.(x, y + 1, "flooded");
+            }
             continue;
           }
         }
         // spread sideways
-        const dirFirst = (x + y) & 1; // deterministic alternation
+        const dirFirst = (x + y) & 1;
         for (const dir of dirFirst ? [1, -1] : [-1, 1]) {
           const j = i + dir;
           const nx = x + dir;
@@ -274,6 +355,7 @@ export class EnvSim {
               level -= move;
               w.liqLevel[i] = level;
               w.dirtyChunks.add(w.chunkOf(nx, y));
+              if (liq === LIQ_WATER) this.onAftermath?.(nx, y, "flooded");
               break;
             }
           }
@@ -296,12 +378,19 @@ export class EnvSim {
       for (let x = x0; x <= x1; x++) {
         const i = x + y * w.w;
         if (w.gasSeed[i] && tick % 240 === 0 && w.tiles[i] === M.AIR && w.gas[i] < 8) {
-          w.gas[i]++; // trapped pockets slowly re-accumulate
+          w.gas[i]++;
           w.dirtyChunks.add(w.chunkOf(x, y));
         }
         const g = w.gas[i];
         if (g <= 0 || g >= 8) continue;
-        // diffuse into open lower-gas neighbours
+        // pressure pocket release: high gas near open space pushes
+        if (g >= 6 && w.gasSeed[i] && this.rng.chance(0.02)) {
+          // release force
+          this.stats.pressureReleases++;
+          this.onAftermath?.(x, y, "pressureRelease");
+          this.bus.emit({ type: "pressureRelease", x, y, force: g * 2 });
+          this.bus.emit({ type: "hazardWarn", kind: "pressure", x, y, severity: g >= 7 ? 3 : 2 });
+        }
         const dirs = [i - w.w, i + w.w, i - 1, i + 1];
         const j = dirs[(x * 3 + y * 7 + tick) & 3];
         if (j >= 0 && j < w.tiles.length && w.tiles[j] === M.AIR && w.gas[j] < g - 1) {
@@ -309,6 +398,9 @@ export class EnvSim {
           w.gas[i] = g - 1;
           w.dirtyChunks.add(w.chunkOf(x, y));
           w.dirtyChunks.add(w.chunkOf(j % w.w, (j / w.w) | 0));
+          if (w.gasSeed[i]) {
+            this.onAftermath?.(j % w.w, (j / w.w) | 0, "pressureRelease");
+          }
         }
       }
     }
@@ -343,13 +435,14 @@ export class EnvSim {
           }
           w.dirtyChunks.add(w.chunkOf(x, y));
           w.dirtyChunks.add(w.chunkOf(x, y + 1));
+          this.stats.collapsed++;
+          this.onAftermath?.(x, y, "collapsed");
         }
       }
     }
   }
 
   // -------------------------------------------------------------------------
-  /** Break a cell for gameplay purposes: drop loot, mark events, particles. */
   breakTerrain(x: number, y: number, tileId: number, chain = true) {
     const w = this.world;
     w.dirtyChunks.add(w.chunkOf(x, y));
@@ -367,11 +460,12 @@ export class EnvSim {
     this.bus.emit({ type: "ignite", x, y });
   }
 
-  /** Deterministic explosion: removes weak materials, damages stronger ones, ignites gas. */
+  /** Deterministic explosion: removes weak materials, damages stronger ones, ignites gas. Destabilizes granular. */
   explode(cx: number, cy: number, radius: number, power: number) {
     const w = this.world;
     this.stats.explosions++;
     const r = Math.ceil(radius);
+    const granularToCollapse: [number, number][] = [];
     for (let dy = -r; dy <= r; dy++) {
       for (let dx = -r; dx <= r; dx++) {
         const dist = Math.sqrt(dx * dx + dy * dy);
@@ -384,11 +478,16 @@ export class EnvSim {
         if (t === M.AIR || t === M.BEDROCK) {
           if (w.gas[i] >= 3) {
             w.gas[i] = 0;
-            // chain ignite neighbours handled by gas spread on later ticks;
-            // for a punchy deterministic chain, detonate immediately
             this.pendingFractures.push({ x, y, delay: 0 });
             w.set(x, y, M.AIR);
             this.explodeInto(x, y, radius * 0.8, power * 0.8);
+            this.stats.burnedGas++;
+            this.onAftermath?.(x, y, "burnedGas");
+          }
+          if (w.liquid[i] === LIQ_OIL) {
+            this.ignite(x, y);
+            this.stats.burnedOil++;
+            this.onAftermath?.(x, y, "burnedOil");
           }
           continue;
         }
@@ -397,6 +496,7 @@ export class EnvSim {
         if (d.tier <= 2 || (d.granular ?? false)) {
           w.set(x, y, M.AIR);
           this.breakTerrain(x, y, t, false);
+          if (d.granular) granularToCollapse.push([x, y]);
         } else if (d.tier <= 5) {
           w.addDamage(x, y, dmg);
           if (w.damage[i] >= d.hp) {
@@ -404,14 +504,45 @@ export class EnvSim {
             this.breakTerrain(x, y, t, false);
           }
         }
-        if (d.flammable && this.rng.chance(0.5)) this.ignite(x, y);
+        if (d.flammable && this.rng.chance(0.5)) {
+          this.ignite(x, y);
+          this.onAftermath?.(x, y, "burnedOil");
+        }
+        // check for granular neighbors to destabilize (compositional: explosions destabilize granular)
+        if (dist <= radius * 0.7) {
+          for (const [gx, gy] of [[1,0],[-1,0],[0,1],[0,-1]] as const) {
+            const nx = x + gx;
+            const ny = y + gy;
+            if (!w.inBounds(nx, ny)) continue;
+            const nt = w.tiles[nx + ny * w.w];
+            if (nt !== M.AIR && mat(nt).granular) {
+              granularToCollapse.push([nx, ny]);
+            }
+          }
+        }
+      }
+    }
+    // destabilize granular after explosion
+    for (const [gx, gy] of granularToCollapse) {
+      if (!w.inBounds(gx, gy)) continue;
+      const gi = gx + gy * w.w;
+      const below = gi + w.w;
+      if (w.tiles[below] === M.AIR) {
+        w.tiles[below] = w.tiles[gi];
+        w.ore[below] = w.ore[gi];
+        w.tiles[gi] = M.AIR;
+        w.ore[gi] = 0;
+        w.dirtyChunks.add(w.chunkOf(gx, gy));
+        w.dirtyChunks.add(w.chunkOf(gx, gy + 1));
+        this.stats.collapsed++;
+        this.onAftermath?.(gx, gy, "collapsed");
       }
     }
     this.bus.emit({ type: "explode", x: cx, y: cy, radius, big: radius >= 3 });
+    this.onAftermath?.(cx, cy, "seismicScar");
   }
 
   private explodeInto(cx: number, cy: number, radius: number, power: number) {
-    // secondary explosion without recursion depth risk: staged as pending
     this.pendingFractures.push({ x: cx, y: cy, delay: 2 });
     void radius;
     void power;
@@ -420,6 +551,7 @@ export class EnvSim {
   /**
    * Resonance pulse: flood-fill connected resonant/conductive material and stage
    * a sequential fracture wave across it. Returns the number of cells affected.
+   * Compositional: propagates through compatible crystal, can stabilize with water nearby.
    */
   resonancePulse(cx: number, cy: number, maxCells = 260, maxRadius = 26): number {
     const w = this.world;
@@ -440,8 +572,26 @@ export class EnvSim {
       if (t === M.AIR || t === M.BEDROCK) continue;
       if (!(d.resonant || d.conductive)) continue;
       if (Math.abs(x - cx) > maxRadius || Math.abs(y - cy) > maxRadius) continue;
-      count++;
-      this.pendingFractures.push({ x, y, delay: count >> 3 }); // visible cascade
+      // water nearby can stabilize crystal instead of fracturing (compositional)
+      let stabilized = false;
+      for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]] as const) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (!w.inBounds(nx, ny)) continue;
+        if (w.liquid[nx + ny * w.w] === LIQ_WATER && w.liqLevel[nx + ny * w.w] >= 4) {
+          if (this.rng.chance(0.15)) {
+            stabilized = true;
+            this.onAftermath?.(x, y, "crystalStabilized");
+            this.bus.emit({ type: "crystalStabilize", x, y });
+            break;
+          }
+        }
+      }
+      if (!stabilized) {
+        count++;
+        this.pendingFractures.push({ x, y, delay: count >> 3 });
+        this.onAftermath?.(x, y, "crystalFracture");
+      }
       const dirs = [i - 1, i + 1, i - w.w, i + w.w];
       for (const j of dirs) {
         if (!seen.has(j) && j >= 0 && j < w.tiles.length) queue.push(j);
@@ -451,7 +601,6 @@ export class EnvSim {
     return count;
   }
 
-  /** Count liquid cells in the active box (diagnostics + tests). */
   countLiquid(kind = LIQ_WATER): number {
     const w = this.world;
     let n = 0;

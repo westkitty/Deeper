@@ -1,6 +1,10 @@
 /**
  * DEEPER — main world scene. Drives the headless sim, renders terrain/entities,
  * handles input, HUD, menus, wow staging, save/load and diagnostics.
+ * v1.2: aftermath, heat/recoil, hazard warnings, gamefeel, WOW audio payoff,
+ * performance bounds diagnostics. Fix: avoid scene.restart() crash in headless
+ * SwiftShader by resetting world without restart, defer heavy work, and make
+ * audio.ensure headless-safe.
  */
 
 import Phaser from "phaser";
@@ -66,24 +70,24 @@ export class WorldScene extends Phaser.Scene {
   private digLoopStop: { stop: () => void } | null = null;
   private lastDigLoopKey = "";
 
-  constructor() {
-    super("world");
-  }
+  constructor() { super("world"); }
 
   preload() {
     loadSheets(this);
-    this.load.image("bg_hills", "assets/props.png"); // full sheet not used directly; hills sliced below
+    this.load.image("bg_hills", "assets/props.png");
   }
 
   create() {
     installErrorBoundary();
     this.input2.loadBindings();
     this.audio.loadMuted();
-    // restore persisted UI prefs
     try {
       const s = JSON.parse(localStorage.getItem("deeper.settings") ?? "{}");
       if (s.highContrast) this.ui.setHighContrast(true);
-      if (typeof s.reducedMotion === "boolean") this.ui.reducedMotion = s.reducedMotion;
+      if (typeof s.reducedMotion === "boolean") {
+        this.ui.reducedMotion = s.reducedMotion;
+        this.audio.setReducedMotion(s.reducedMotion);
+      }
     } catch { /* defaults */ }
     sliceAll(this);
     log.info("scene", "world create");
@@ -104,12 +108,11 @@ export class WorldScene extends Phaser.Scene {
 
     this.cameras.main.setBounds(0, 0, CELL * 160, CELL * 864);
     this.cameras.main.setZoom(1);
-    void CAM_ZOOM;
-    void GAME_WIDTH;
-    void GAME_HEIGHT;
+    void CAM_ZOOM; void GAME_WIDTH; void GAME_HEIGHT;
 
     this.terrain = new TerrainRenderer(this, this.sim.world);
     this.entities = new EntityRenderer(this, this.sim);
+    this.entities.reducedMotion = this.audio.reducedMotion;
     this.terrain.warmup(this.sim.rig.x, this.sim.rig.y, 1);
 
     this.input2.attach(this.game.canvas);
@@ -124,17 +127,13 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
-  private onResize(size: Phaser.Structs.Size) {
-    this.scale.resize(size.width, size.height);
-  }
+  private onResize(size: Phaser.Structs.Size) { this.scale.resize(size.width, size.height); }
 
-  /** Start/resume gameplay after menu flow. */
   beginPlay(fresh: boolean) {
     this.started = true;
     this.paused = false;
     this.ui.clearMenu();
-    this.audio.ensure();
-    // touch devices get on-screen controls
+    try { this.audio.ensure(); } catch {}
     if ("ontouchstart" in window || navigator.maxTouchPoints > 0) {
       this.ui.showTouchControls({
         onLeft: (v) => (this.input2.touchLeft = v),
@@ -159,11 +158,9 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
-  // -------------------------------------------------------------------------
   private pressUnsub?: () => void;
 
   private wireInput() {
-    // scene restart re-runs create(): drop the previous key handler first
     this.pressUnsub?.();
     this.pressUnsub = this.input2.onPress((k) => {
       if (k === "escape") {
@@ -196,12 +193,15 @@ export class WorldScene extends Phaser.Scene {
         if (t <= this.sim.rig.ownedTools) {
           this.sim.rig.toolTier = t;
           this.ui.toast({ text: `${tool(t).name} selected`, color: "#d8a83c" });
+          this.audio.playTierAcquire(t);
+          this.entities.spawnTierAcquire(this.sim.rig.x * CELL, this.sim.rig.y * CELL, t);
         }
       }
       if (k === "q") {
         const next = (this.sim.rig.toolTier + 1) % (this.sim.rig.ownedTools + 1);
         this.sim.rig.toolTier = next;
         this.ui.toast({ text: `${tool(next).name} selected`, color: "#d8a83c" });
+        this.audio.playTierAcquire(next);
       }
     });
   }
@@ -209,16 +209,10 @@ export class WorldScene extends Phaser.Scene {
   private interact() {
     const t = this.sim.interactTarget();
     if (!t) return;
-    if (t.kind === "base") {
-      this.openWorkshop();
-      return;
-    }
+    if (t.kind === "base") { this.openWorkshop(); return; }
     this.sim.interact();
     if (t.kind === "valve") this.audio.play("valve", 0.9);
     if (t.kind === "lift") this.audio.play("lift", 0.7);
-    if (t.kind === "core") {
-      // finale handled via wow event
-    }
   }
 
   private togglePause() {
@@ -226,12 +220,9 @@ export class WorldScene extends Phaser.Scene {
     if (this.paused) {
       this.ui.showPause(
         () => this.togglePause(),
-        () => {
-          this.openSettings("pause");
-        },
+        () => { this.openSettings("pause"); },
         () => {
           saveGame(this.sim);
-          this.scene.restart();
           this.game.registry.set("showTitle", true);
           window.location.reload();
         },
@@ -259,7 +250,7 @@ export class WorldScene extends Phaser.Scene {
       (s) => {
         this.audio.setVolumes(s);
         this.audio.shake = s.shake;
-        this.audio.reducedMotion = s.reducedMotion;
+        this.audio.setReducedMotion(s.reducedMotion);
         this.ui.reducedMotion = s.reducedMotion;
         this.entities.reducedMotion = s.reducedMotion;
         this.sim.rig.assistMode = s.assistMode;
@@ -270,9 +261,7 @@ export class WorldScene extends Phaser.Scene {
       () => {
         this.settingsOpen = false;
         this.ui.clearMenu();
-        if (from === "title") {
-          this.showTitle();
-        }
+        if (from === "title") this.showTitle();
       },
       {
         bindings: { ...this.input2.bindings } as unknown as Record<string, string[]>,
@@ -302,19 +291,84 @@ export class WorldScene extends Phaser.Scene {
     );
   }
 
+  private resetWorld(newSim: GameSim, fresh: boolean) {
+    try {
+      this.sim = newSim;
+      if (this.terrain) {
+        this.terrain.world = newSim.world;
+        try {
+          const blitters = (this.terrain as any).blitters as (Phaser.GameObjects.Blitter | null)[];
+          for (let i = 0; i < blitters.length; i++) {
+            const b = blitters[i];
+            if (b) { try { b.clear(); } catch {} }
+          }
+        } catch {}
+        try { this.terrain.warmup(newSim.rig.x, newSim.rig.y, 1); } catch {}
+      }
+      if (this.entities) {
+        try {
+          const er: any = this.entities as any;
+          for (const s of this.entities.lootSprites.values()) try { s.destroy(); } catch {}
+          this.entities.lootSprites.clear();
+          for (const s of this.entities.threatSprites.values()) try { s.destroy(); } catch {}
+          this.entities.threatSprites.clear();
+          for (const fx of er.threatFxMap?.values?.() ?? []) { try { fx.aura?.destroy(); } catch {} try { fx.tele?.destroy(); } catch {} }
+          er.threatFxMap?.clear?.();
+          for (const s of this.entities.cacheSprites.values()) try { s.destroy(); } catch {}
+          this.entities.cacheSprites.clear();
+          for (const spr of er.chargeSprites ?? []) try { spr.destroy(); } catch {}
+          er.chargeSprites = [];
+          for (const spr of er.scanSprites ?? []) try { spr.destroy(); } catch {}
+          er.scanSprites = [];
+          for (const s of er.deathSprites?.values?.() ?? []) try { s.destroy(); } catch {}
+          er.deathSprites?.clear?.();
+          for (const s of er.mapSprites?.values?.() ?? []) try { s.destroy(); } catch {}
+          er.mapSprites?.clear?.();
+          for (const p of er.particles ?? []) try { p.s?.destroy(); } catch {}
+          er.particles = [];
+          for (const t of er.texts ?? []) try { t.t?.destroy(); } catch {}
+          er.texts = [];
+          for (const s of er.fireSprites?.values?.() ?? []) try { s.destroy(); } catch {}
+          er.fireSprites?.clear?.();
+          for (const s of er.steamSprites ?? []) try { s.s?.destroy(); } catch {}
+          er.steamSprites = [];
+          for (const s of er.aftermathSprites?.values?.() ?? []) try { s.destroy(); } catch {}
+          er.aftermathSprites?.clear?.();
+          for (const h of er.hazardSprites ?? []) try { h.s?.destroy(); } catch {}
+          er.hazardSprites = [];
+          this.entities.sim = newSim;
+          try { er.syncCaches?.(true); } catch {}
+        } catch {}
+      }
+      this.wireSimEvents();
+      (window as unknown as { deeper?: unknown }).deeper = this.makeQAHook();
+      this.beginPlay(fresh);
+    } catch (e) {
+      console.error('resetWorld err', e);
+    }
+  }
+
   private showTitle() {
     this.paused = true;
     this.ui.showTitle(
       (seedOpt?: number) => {
         const seed = seedOpt ?? ((Date.now() ^ (Math.random() * 0xffffffff)) >>> 0);
-        this.scene.restart();
-        this.game.registry.set("pendingSeed", seed);
-        this.game.registry.set("autostart", true);
+        window.setTimeout(() => {
+          try {
+            const newSim = new GameSim(seed);
+            this.resetWorld(newSim, true);
+          } catch (e) { console.error('new game err', e); }
+        }, 10);
       },
       () => {
-        this.scene.restart();
-        this.game.registry.set("pendingLoad", true);
-        this.game.registry.set("autostart", true);
+        window.setTimeout(() => {
+          try {
+            const data = loadSaveData();
+            const newSim = new GameSim(data?.seed);
+            if (data) newSim.load(data);
+            this.resetWorld(newSim, false);
+          } catch (e) { console.error('load err', e); }
+        }, 10);
       },
       () => this.openSettings("title"),
       () => this.ui.showCredits(() => this.showTitle()),
@@ -335,36 +389,16 @@ export class WorldScene extends Phaser.Scene {
     });
   }
 
-  private closeWorkshop() {
-    this.workshopOpen = false;
-    this.workshop = null;
-    this.ui.clearMenu();
-  }
-
+  private closeWorkshop() { this.workshopOpen = false; this.workshop = null; this.ui.clearMenu(); }
   private openMap() {
     if (this.mapOpen) return;
     this.mapOpen = true;
     this.mapView = openMap(this.sim, () => this.closeMap());
   }
+  private closeMap() { this.mapOpen = false; this.mapView = null; this.ui.clearMenu(); }
+  private closeSettings() { this.settingsOpen = false; this.ui.clearMenu(); if (!this.started) this.showTitle(); }
+  private closeFinale() { this.finaleOpen = false; this.ui.clearMenu(); }
 
-  private closeMap() {
-    this.mapOpen = false;
-    this.mapView = null;
-    this.ui.clearMenu();
-  }
-
-  private closeSettings() {
-    this.settingsOpen = false;
-    this.ui.clearMenu();
-    if (!this.started) this.showTitle();
-  }
-
-  private closeFinale() {
-    this.finaleOpen = false;
-    this.ui.clearMenu();
-  }
-
-  // -------------------------------------------------------------------------
   private wireSimEvents() {
     this.sim.bus.on((e) => {
       switch (e.type) {
@@ -372,7 +406,8 @@ export class WorldScene extends Phaser.Scene {
           const [wx, wy] = [e.x * CELL + CELL / 2, e.y * CELL + CELL / 2];
           if (e.effective) {
             if (Math.random() < 0.5) this.entities.spawnSparks(wx, wy, 2);
-            this.audio.digSound(mat(e.mat).sound, true);
+            this.audio.digSound(mat(e.mat).sound, true, this.sim.rig.toolTier);
+            if (this.sim.rig.toolTier >= 2) this.entities.spawnRecoil(wx, wy, tool(this.sim.rig.toolTier).recoil * 0.3);
           } else {
             this.audio.digSound(mat(e.mat).sound, false);
             this.entities.spawnSparks(wx, wy, 1);
@@ -381,10 +416,16 @@ export class WorldScene extends Phaser.Scene {
         }
         case "break": {
           this.entities.spawnBreakDebris(e.x, e.y, e.mat, (e.count ?? 1) > 2);
-          break;
-        }
-        case "pickup": {
-          // burst at rig
+          this.audio.playDebris();
+          if (e.chain) {
+            this.audio.play("wow_chain", 0.5, 0.9 + Math.random() * 0.2);
+            this.addShake(5);
+            this.ui.toast({ text: `CHAIN x${e.count} — collapse!`, color: "#e8a040" });
+          }
+          if ((e.count ?? 0) >= 4) {
+            this.entities.spawnBreakthrough(e.x, e.y);
+            this.audio.playBreakthrough();
+          }
           break;
         }
         case "explode": {
@@ -413,10 +454,7 @@ export class WorldScene extends Phaser.Scene {
           this.addShake(3);
           break;
         }
-        case "death": {
-          this.audio.play("extract", 0.9);
-          break;
-        }
+        case "death": { this.audio.play("extract", 0.9); break; }
         case "emergencyExtract": {
           this.audio.play("extract", 1);
           if (!this.extractedShown) {
@@ -438,15 +476,34 @@ export class WorldScene extends Phaser.Scene {
           this.ui.toast({ text: "CARGO FULL — sell at the works (E at base)", color: "#e05838", icon: "cargo" });
           break;
         }
-        case "pickup": break;
+        case "pickup": {
+          const rigPx = this.sim.rig.x * CELL;
+          const rigPy = this.sim.rig.y * CELL;
+          this.entities.spawnPickupBurst(rigPx, rigPy, e.res);
+          this.audio.play("pickup", 0.7, 0.9 + Math.random() * 0.2);
+          if (e.vacuum) {
+            this.entities.spawnMagnetStreak(rigPx, rigPy);
+            this.audio.playMagnetStreak();
+          }
+          break;
+        }
         case "blocked": break;
         case "blockedMarked": {
           this.ui.toast({ text: "Blocked site marked on your map.", color: "#e05838" });
           break;
         }
         case "nowVulnerable": {
-          this.ui.banner(`${e.count} MARKED SITE${e.count === 1 ? "" : "S"} NOW VULNERABLE`, "Your new capability breaks what stopped you. The map shows where.", 4200);
+          const details = (e as any).details as { x: number; y: number; mat: number }[] | undefined;
+          let extra = "";
+          if (details && details.length) {
+            const groups = new Map<string, number>();
+            for (const d of details) { const n = mat(d.mat).name; groups.set(n, (groups.get(n) ?? 0) + 1); }
+            extra = [...groups.entries()].map(([k, v]) => `${v}x ${k}`).join(", ");
+          }
+          this.ui.banner(`${e.count} MARKED SITE${e.count === 1 ? "" : "S"} NOW VULNERABLE`, extra || "Your new capability breaks what stopped you. The map shows where.", 4200);
           this.audio.play("discovery", 0.7);
+          this.audio.playBreakthrough();
+          if (details) for (const d of details.slice(0, 8)) this.entities.spawnBreakthrough(d.x, d.y);
           break;
         }
         case "landmarkRevealed": {
@@ -472,6 +529,7 @@ export class WorldScene extends Phaser.Scene {
         }
         case "geode": {
           this.audio.play("big_loot", 0.8);
+          this.entities.spawnPickupBurst(this.sim.rig.x * CELL, this.sim.rig.y * CELL, "geode");
           break;
         }
         case "motherlode": {
@@ -493,8 +551,9 @@ export class WorldScene extends Phaser.Scene {
           const b = WOW_BANNERS[e.key as WowKey];
           if (b) {
             this.ui.banner(b[0], b[1], 4600, "wow");
+            this.audio.playWow(e.key);
             this.audio.play(b[2], 0.95);
-            this.addShake(6);
+            this.addShake(8);
           }
           if (e.key === "wow12_depth") {
             window.setTimeout(() => {
@@ -506,16 +565,70 @@ export class WorldScene extends Phaser.Scene {
           }
           break;
         }
-        case "threatDeath": {
-          this.audio.play("dig_metal", 0.4, 0.8);
+        case "threatDeath": { this.audio.play("dig_metal", 0.4, 0.8); break; }
+        case "coreExtracted": { this.audio.play("discovery", 1); break; }
+        case "overheat": {
+          this.audio.playHazard("overheat", 1);
+          this.audio.play("overheat", 0.7);
+          this.ui.toast({ text: "OVERHEAT — cooling down", color: "#e85838", icon: "hazard" });
+          this.addShake(4);
           break;
         }
-        case "coreExtracted": {
-          this.audio.play("discovery", 1);
+        case "overheatEnd": { this.ui.toast({ text: "Heat nominal", color: "#48c8b0" }); break; }
+        case "digRecoil": {
+          this.audio.playRecoil(e.tier);
+          this.addShake(e.recoil * 8);
           break;
         }
-        default:
+        case "jump": break;
+        case "heavyLanding": {
+          this.entities.spawnHeavyLanding(e.x, e.y, e.tier);
+          this.audio.playLanding(30 + e.tier * 5);
+          this.audio.play("landing_heavy", 0.5 + e.tier * 0.08);
+          this.addShake(2 + e.tier);
           break;
+        }
+        case "landing": {
+          if (e.impact > 12) {
+            this.entities.spawnHeavyLanding(this.sim.rig.x, this.sim.rig.y, e.tier);
+            this.audio.playLanding(e.impact);
+            if (e.impact > 25) this.addShake(e.impact * 0.15);
+          }
+          break;
+        }
+        case "pressureRelease": {
+          this.entities.spawnPressureRelease(e.x, e.y, e.force);
+          this.audio.playHazard("pressure", e.force / 20);
+          this.audio.play("pressure_pop", 0.7);
+          this.addShake(e.force * 0.2);
+          break;
+        }
+        case "aftermath": {
+          this.entities.spawnAftermathMark(e.x, e.y, e.kind);
+          break;
+        }
+        case "hazardWarn": {
+          this.entities.spawnHazardWarn(e.x, e.y, e.kind, e.severity);
+          this.audio.playHazard(e.kind, e.severity);
+          break;
+        }
+        case "threatSteal": {
+          this.ui.toast({ text: `Threat stole ${e.amount}x ${e.res}!`, color: "#e05050", icon: "hazard" });
+          this.audio.play("threat_warn", 0.7);
+          break;
+        }
+        case "crystalStabilize": {
+          this.entities.spawnCrystalStabilize(e.x, e.y);
+          this.audio.play("resonator_pulse", 0.6, 1.1);
+          break;
+        }
+        case "drain": {
+          this.audio.play("water", 0.7);
+          this.entities.spawnSteam(e.x * CELL, e.y * CELL);
+          break;
+        }
+        case "flood": { this.audio.play("water", 0.5); break; }
+        default: break;
       }
     });
   }
@@ -526,21 +639,14 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private checkVulnerableAnnounce() {
-    // handled via economy events; re-evaluate markers on any capability gain
     this.sim.blocked.reevaluate(this.sim.rig.toolTier);
   }
 
-  // -------------------------------------------------------------------------
   override update(_time: number, delta: number) {
     const dt = Math.min(0.05, delta / 1000);
     this.animTime += dt;
-    this.frames++;
-    this.fpsTime += dt;
-    if (this.fpsTime >= 0.5) {
-      this.fps = this.frames / this.fpsTime;
-      this.frames = 0;
-      this.fpsTime = 0;
-    }
+    this.frames++; this.fpsTime += dt;
+    if (this.fpsTime >= 0.5) { this.fps = this.frames / this.fpsTime; this.frames = 0; this.fpsTime = 0; }
 
     if (!this.started) {
       if (this.game.registry.get("showTitle") !== false && !this.settingsOpen) {
@@ -554,13 +660,9 @@ export class WorldScene extends Phaser.Scene {
     const menuBlocking = this.paused || this.workshopOpen || this.mapOpen || this.settingsOpen || this.finaleOpen;
 
     if (!menuBlocking) {
-      // input → sim
       this.input2.pollGamepad();
       const cam = this.cameras.main;
-      this.pointerWorld.set(
-        cam.scrollX + this.input2.pointerX,
-        cam.scrollY + this.input2.pointerY,
-      );
+      this.pointerWorld.set(cam.scrollX + this.input2.pointerX, cam.scrollY + this.input2.pointerY);
       const inp = this.sim.input;
       inp.left = this.input2.left;
       inp.right = this.input2.right;
@@ -569,7 +671,6 @@ export class WorldScene extends Phaser.Scene {
       inp.dig = this.input2.digActive;
       inp.aimX = this.pointerWorld.x / CELL;
       inp.aimY = this.pointerWorld.y / CELL;
-      // utility on press edge
       if (this.input2.utilityPressed && !this.utilPrev) {
         this.sim.useUtilityAt(inp.aimX, inp.aimY);
         const td = tool(this.sim.rig.toolTier);
@@ -581,13 +682,10 @@ export class WorldScene extends Phaser.Scene {
       const stNow = stratumAtRow(Math.floor(this.sim.rig.y));
       this.audio.setDepthTint(Math.min(1, this.sim.rig.y / 800));
       this.audio.setStratum(stNow);
-      // tutorial hints → toasts
       if (this.sim.pendingHint) {
-        const h = this.sim.pendingHint;
-        this.sim.pendingHint = null;
+        const h = this.sim.pendingHint; this.sim.pendingHint = null;
         this.ui.toast({ text: h.text, color: "#48c8b0", icon: "info" });
       }
-      // threat radar: audio warning when a threat closes in
       this.radarTimer -= dt;
       if (this.radarTimer <= 0) {
         this.radarTimer = 3;
@@ -595,13 +693,11 @@ export class WorldScene extends Phaser.Scene {
         if (near && near.elite) this.audio.play("threat_warn", 0.5);
         else if (near) this.audio.play("threat_warn", 0.25, 1.2);
       }
-      // scan ring VFX on new pings
       if (this.sim.stats.scansPulsed !== this.lastScanCount) {
         this.lastScanCount = this.sim.stats.scansPulsed;
         const s = this.sim.lastScan;
         if (s) this.entities.spawnScanRing(s.x * CELL, s.y * CELL);
       }
-      // heal sparkle while base aura regenerates
       this.healTimer -= dt;
       if (this.healTimer <= 0) {
         this.healTimer = 1.2;
@@ -609,18 +705,15 @@ export class WorldScene extends Phaser.Scene {
           this.entities.spawnHeal(this.sim.rig.x * CELL, this.sim.rig.y * CELL);
         }
       }
-      // dig loop audio
       const loopKey = `tool_${tool(this.sim.rig.toolTier).key}`;
       if (inp.dig && this.sim.rig.lastDugCell.x >= 0) {
         if (this.lastDigLoopKey !== loopKey) {
           this.digLoopStop?.stop();
-          this.digLoopStop = this.audio.toolLoopStart(loopKey);
+          this.digLoopStop = this.audio.toolLoopStart(this.sim.rig.toolTier);
           this.lastDigLoopKey = loopKey;
         }
       } else if (this.digLoopStop) {
-        this.digLoopStop.stop();
-        this.digLoopStop = null;
-        this.lastDigLoopKey = "";
+        this.digLoopStop.stop(); this.digLoopStop = null; this.lastDigLoopKey = "";
       }
     } else {
       this.sim.input.dig = false;
@@ -628,13 +721,11 @@ export class WorldScene extends Phaser.Scene {
       this.sim.input.jump = false;
     }
 
-    // ---- rendering sync
     this.terrain.flushDirty(3);
     this.terrain.update(dt);
     this.entities.update(dt, this.animTime);
     this.terrain.drawFog(this.cameras.main, this.sim.rig.x, this.sim.rig.y);
 
-    // camera follow
     const cam = this.cameras.main;
     const rigPx = this.sim.rig.x * CELL;
     const rigPy = this.sim.rig.y * CELL;
@@ -645,23 +736,18 @@ export class WorldScene extends Phaser.Scene {
     if (this.shakeAmount > 0.2) {
       cam.shake(80, this.shakeAmount * 0.0006);
       this.shakeAmount *= Math.pow(0.001, dt);
-    } else {
-      this.shakeAmount = 0;
-    }
+    } else this.shakeAmount = 0;
 
-    // ---- HUD
     this.hudTimer += dt;
     if (this.hudTimer > 0.12) {
       this.hudTimer = 0;
-      const rig = this.sim.rig;
-      const f = rig.fx();
-      const st = stratumAtRow(Math.floor(rig.y));
+      const rig = this.sim.rig; const f = rig.fx(); const st = stratumAtRow(Math.floor(rig.y));
       let hazard = "";
       if (st === "redfault" && f.heatProt < 1) hazard = "⚠ HEAT — coolant required";
       if (st === "drownedfault" && rig.y > 340 && f.pressureProt < 1) hazard = "⚠ PRESSURE — hull required";
       if (rig.hp < rig.effectiveMaxHp() * 0.3) hazard = "⚠ RIG INTEGRITY LOW";
       if (this.sim.liftChannel) hazard = `◈ LIFT CHANNEL ${Math.round(this.sim.liftChannelProgress * 100)}% — hold still`;
-      // depth progress to next stratum
+      if (rig.overheated) hazard = "⚠ OVERHEAT";
       const row = Math.floor(rig.y);
       const order = STRATUM_DEPTHS;
       const idx = order.findIndex((s) => s.id === st);
@@ -693,26 +779,23 @@ export class WorldScene extends Phaser.Scene {
       });
     }
 
-    // ---- diagnostics
     if (this.diagOn) {
       this.ui.setDiag(this.ui.diagText2({
         fps: this.fps, tick: this.sim.tick, x: this.sim.rig.x, y: this.sim.rig.y,
         chunks: this.sim.world.activeChunks.size, dirty: this.sim.world.dirtyChunks.size,
-        particles: this.entities["particles"].length,
+        particles: (this.entities as any)["particles"].length,
         liquid: this.sim.env.countLiquid(), gas: this.sim.env.countGas(),
         threats: this.sim.threats.threats.length, loot: this.sim.loot.loot.length,
         envMs: this.sim.env.metrics.lastMs, envOver: this.sim.env.metrics.overBudgetTicks,
         cellsSet: this.sim.world.metrics.cellsSet, coalesced: this.sim.world.metrics.batchCoalesced,
         events: this.sim.bus.eventCounts(),
-      }));
+        aftermath: this.sim.aftermath.entries.length,
+        steamCells: (this.sim.env as any).steamCells?.length ?? 0,
+      } as any));
     }
 
-    // ---- autosave
     this.autosaveTimer += dt;
-    if (this.autosaveTimer > 30) {
-      this.autosaveTimer = 0;
-      saveGame(this.sim);
-    }
+    if (this.autosaveTimer > 30) { this.autosaveTimer = 0; saveGame(this.sim); }
   }
 
   private utilPrev = false;
@@ -728,9 +811,8 @@ export class WorldScene extends Phaser.Scene {
       sim: () => scene.sim,
       audio: scene.audio,
       start: (seed?: number) => {
-        scene.game.registry.set("pendingSeed", seed ?? 12345);
-        scene.game.registry.set("autostart", true);
-        scene.scene.restart();
+        const s = new GameSim(seed ?? 12345);
+        scene.resetWorld(s, true);
       },
       state: () => {
         const s = scene.sim;
@@ -757,12 +839,14 @@ export class WorldScene extends Phaser.Scene {
           paused: scene.paused,
           digHeld: scene.input2.digHeld,
           inputDig: s.input.dig,
+          aftermath: s.aftermath.entries.length,
+          heat: s.rig.heat,
+          overheat: s.rig.overheated,
+          threats: s.threats.threats.length,
         };
       },
       save: () => saveGame(scene.sim),
-      pause: (p: boolean) => {
-        scene.paused = p;
-      },
+      pause: (p: boolean) => { scene.paused = p; },
     };
   }
 }

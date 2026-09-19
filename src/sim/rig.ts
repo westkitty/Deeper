@@ -2,6 +2,9 @@
  * DEEPER — the rig: player machine simulation.
  * Movement, digging (tool-driven terrain damage), cargo, health, protection,
  * emergency extraction. Pure logic; the presentation layer drives it with input.
+ * v1.2: machine identity — each tier has distinct footprint, cadence, power,
+ * movement feel, heat/cooling, cargo, terrain interaction, utility, audio,
+ * visual feedback and access. Heat, recoil, weight, debris multipliers.
  */
 
 import { BASE_X, RIG, SURFACE_ROW, TICK_DT, WORLD_H, WORLD_W, stratumAtRow } from "../config";
@@ -19,7 +22,7 @@ export interface RigInput {
   dig: boolean;
   utility: boolean;
   interact: boolean;
-  aimX: number; // world cells
+  aimX: number;
   aimY: number;
   selectedTool: number;
   winch?: boolean;
@@ -41,9 +44,7 @@ export class Rig {
   maxHp = 100;
   dead = false;
   deadTimer = 0;
-  /** Assist mode: 2x HP, half threat damage (accessibility, persisted). */
   assistMode = false;
-  /** Magnet streak: consecutive quick pickups boost vacuum briefly. */
   magnetStreak = 0;
   magnetStreakTimer = 0;
   lastPickupAt = -99;
@@ -53,7 +54,7 @@ export class Rig {
   blueprints = new Set<string>();
   relics = new Set<string>();
   toolTier = 0;
-  ownedTools = 0; // highest owned tool tier (contiguous unlock chain)
+  ownedTools = 0;
   upgrades = new Set<string>();
   charges = 0;
   maxCharges = 3;
@@ -63,10 +64,15 @@ export class Rig {
   aimAngle = 0;
   digTicks = 0;
 
-  // accumulated FX hooks
+  heat = 0;
+  overheatTimer = 0;
+  lastRecoil = 0;
+  weight = 1.0;
+  momentum = 0;
+
   lastDugCell = { x: -1, y: -1 };
-  /** Called when the Resonator strikes resonant material (GameSim wires the pulse). */
   onResonantHit?: (x: number, y: number) => void;
+  onAftermath?: (x: number, y: number, kind: string, tier: number) => void;
   rng: RNG;
 
   constructor(world: World, bus: EventBus) {
@@ -75,7 +81,6 @@ export class Rig {
     this.rng = new RNG(0x51ce + world.seed);
   }
 
-  // ---- derived stats ------------------------------------------------------
   fx(): Required<Pick<UpgradeDef["fx"], "cargoCap" | "cargoBulkMul" | "vacuum" | "jump" | "run" | "heatProt" | "pressureProt" | "scanTier" | "refinery" | "chargeCap">> & { damper: boolean; winch: boolean; lift: boolean; caches: boolean } {
     const f = {
       cargoCap: 30, cargoBulkMul: 1, vacuum: 2.2, jump: RIG.jump, run: RIG.maxRun,
@@ -83,7 +88,6 @@ export class Rig {
       damper: false, winch: false, lift: false, caches: false,
     };
     for (const key of this.upgrades) {
-      // imperatively apply owned upgrades (requires chains are enforced at purchase)
       const u = UPGRADE_MAP.get(key);
       if (!u) continue;
       const fx = u.fx;
@@ -107,86 +111,124 @@ export class Rig {
 
   cargoUsed(bulkMul = 1): number {
     let used = 0;
-    for (const [res, amount] of this.cargo) {
-      used += amount * (RESOURCES[res]?.bulk ?? 1) * bulkMul;
-    }
+    for (const [res, amount] of this.cargo) used += amount * (RESOURCES[res]?.bulk ?? 1) * bulkMul;
     return used;
   }
-  cargoFree(): number {
-    return this.fx().cargoCap - this.cargoUsed(this.fx().cargoBulkMul);
-  }
+  cargoFree(): number { return this.fx().cargoCap - this.cargoUsed(this.fx().cargoBulkMul); }
   cargoValue(): number {
     let v = 0;
     for (const [res, amount] of this.cargo) v += amount * (RESOURCES[res]?.value ?? 0);
     return v;
   }
 
-  // ---- movement -------------------------------------------------------------
   step(input: RigInput, tick: number) {
     const w = this.world;
-    // magnet streak decay
     if (this.magnetStreakTimer > 0) {
       this.magnetStreakTimer -= TICK_DT;
       if (this.magnetStreakTimer <= 0) this.magnetStreak = 0;
+    }
+    const td = tool(this.toolTier);
+    const f = this.fx();
+    const cooling = td.heat.cool * (1 + f.heatProt * 0.5);
+    this.heat = Math.max(0, this.heat - cooling * TICK_DT);
+    if (this.overheatTimer > 0) {
+      this.overheatTimer -= TICK_DT;
+      if (this.overheatTimer <= 0) this.bus.emit({ type: "overheatEnd" } as any);
     }
     if (this.dead) {
       this.deadTimer -= TICK_DT;
       if (this.deadTimer <= 0) this.emergencyExtract();
       return;
     }
-    const f = this.fx();
-    const run = f.run;
+    const baseRun = f.run;
+    const run = baseRun * td.move.runMul;
+    const accelBase = RIG.accel * td.move.accelMul;
+    const weight = td.move.weight;
+    this.weight = weight;
 
     let ax = 0;
-    if (input.left) ax -= RIG.accel;
-    if (input.right) ax += RIG.accel;
+    if (input.left) ax -= accelBase;
+    if (input.right) ax += accelBase;
     if (ax !== 0) this.facing = ax > 0 ? 1 : -1;
+    const friction = RIG.friction / weight;
     this.vx += ax * TICK_DT;
-    if (input.left === input.right) this.vx -= this.vx * Math.min(1, RIG.friction * TICK_DT);
+    if (input.left === input.right) {
+      this.vx -= this.vx * Math.min(1, friction * TICK_DT);
+      this.momentum *= 0.92;
+    } else {
+      this.momentum = Math.min(1, Math.abs(this.vx) / run) * weight * 0.5;
+    }
     this.vx = Math.max(-run, Math.min(run, this.vx));
 
     const inWater = this.liquidContact() === LIQ_WATER;
-    const gravity = inWater ? RIG.gravity * 0.42 : RIG.gravity;
-    const maxFall = inWater ? RIG.maxFall * 0.3 : RIG.maxFall;
+    const gravity = inWater ? RIG.gravity * (0.42 / Math.max(0.5, weight * 0.6)) : RIG.gravity * weight * 0.85;
+    const maxFall = inWater ? RIG.maxFall * 0.3 : RIG.maxFall * Math.min(1.2, weight * 0.5 + 0.5);
 
-    // jump / boost
+    const jumpMul = td.move.jumpMul;
     if (input.jump && this.grounded && this.vy > -1) {
-      this.vy = -f.jump * (inWater ? 0.7 : 1);
+      this.vy = -f.jump * jumpMul * (inWater ? 0.7 : 1) / Math.max(0.7, weight * 0.6);
       this.grounded = false;
+      this.bus.emit({ type: "jump", tier: this.toolTier, weight } as any);
     }
-    // winch: slow vertical climb against walls
     if (input.winch && f.winch && !this.grounded) {
       const againstWall =
         (input.left && this.collidesAt(this.x - RIG.w / 2 - 0.1, this.y)) ||
         (input.right && this.collidesAt(this.x + RIG.w / 2 + 0.1, this.y));
-      if (againstWall) this.vy = Math.min(this.vy, -4.2);
+      if (againstWall) this.vy = Math.min(this.vy, -4.2 / Math.max(0.8, weight * 0.7));
     }
 
     this.vy += gravity * TICK_DT;
     this.vy = Math.min(this.vy, maxFall);
 
-    // horizontal move + collide (cell vs AABB)
     this.moveX(this.vx * TICK_DT);
     const fallSpeed = this.vy;
     this.moveY(this.vy * TICK_DT);
 
-    // landing damage
     if (this.grounded && fallSpeed > RIG.fallSafeSpeed && !f.damper) {
-      const dmg = (fallSpeed - RIG.fallSafeSpeed) * 1.35;
+      const weightDmg = weight > 1.5 ? 1.0 : 1.35;
+      const dmg = (fallSpeed - RIG.fallSafeSpeed) * weightDmg;
+      if (td.specials.includes("heavyLanding")) {
+        this.heavyLandingShock();
+        this.bus.emit({ type: "heavyLanding", tier: this.toolTier, x: this.x, y: this.y } as any);
+      }
       this.hurt(dmg, "impact");
+      this.bus.emit({ type: "landing", impact: fallSpeed, tier: this.toolTier, weight } as any);
     }
 
-    // environmental hazards
     this.applyStratumHazards();
 
-    // dig
     this.digCooldown -= TICK_DT;
     this.utilityCooldown -= TICK_DT;
+    const overheatMul = this.heat > td.heat.overheatAt ? 1.6 : 1.0;
     if (input.dig && this.digCooldown <= 0) {
-      this.digAt(input.aimX, input.aimY, tick);
+      if (this.overheatTimer <= 0) {
+        this.digAt(input.aimX, input.aimY, tick);
+        this.digCooldown *= overheatMul;
+      } else {
+        if (this.rng.chance(0.5)) {
+          this.bus.emit({ type: "drillHit", x: Math.floor(input.aimX), y: Math.floor(input.aimY), mat: M.AIR, effective: false, toolTier: this.toolTier } as any);
+        } else {
+          this.digAt(input.aimX, input.aimY, tick);
+        }
+      }
     }
-    if (input.utility && this.utilityCooldown <= 0) {
-      this.useUtility(input.aimX, input.aimY);
+    if (input.utility && this.utilityCooldown <= 0) this.useUtility(input.aimX, input.aimY);
+    this.lastRecoil *= Math.pow(0.1, TICK_DT);
+  }
+
+  private heavyLandingShock() {
+    const w = this.world;
+    const cx = Math.floor(this.x);
+    const cy = Math.floor(this.y + 1);
+    for (let dy = 0; dy <= 1; dy++) for (let dx = -2; dx <= 2; dx++) {
+      const x = cx + dx; const y = cy + dy;
+      const t = w.get(x, y);
+      if (t === M.AIR || t === M.BEDROCK) continue;
+      const d = mat(t);
+      if (w.damageOf(x, y) >= d.hp * 0.3) {
+        w.set(x, y, M.AIR);
+        this.bus.emit({ type: "break", x, y, mat: t, count: 1, chain: true });
+      }
     }
   }
 
@@ -194,21 +236,15 @@ export class Rig {
     if (dx === 0) return;
     const dir = Math.sign(dx);
     let remaining = Math.abs(dx);
-    const edge = () => this.x + dir * (RIG.w / 2);
     while (remaining > 0) {
       const step = Math.min(0.2, remaining);
       const nx = this.x + dir * step;
       const col = Math.floor(nx + dir * (RIG.w / 2 - 0.02));
-      // obstacle in the leading column across the hull's rows?
       let blocked = false;
       for (const oy of [-RIG.h / 2 + 0.1, 0, RIG.h / 2 - 0.05]) {
-        if (this.world.solid(col, Math.floor(this.y + oy))) {
-          blocked = true;
-          break;
-        }
+        if (this.world.solid(col, Math.floor(this.y + oy))) { blocked = true; break; }
       }
       if (blocked) {
-        // step-up: 1-cell lip while grounded
         if (this.grounded &&
             !this.world.solid(col, Math.floor(this.y - RIG.h / 2 + 0.1) - 1) &&
             !this.world.solid(Math.floor(this.x), Math.floor(this.y - RIG.h / 2 + 0.1) - 1)) {
@@ -236,7 +272,6 @@ export class Rig {
       const probe = ny + (dir > 0 ? RIG.h / 2 : -RIG.h / 2);
       if (this.collidesAt(this.x, ny, dir > 0 ? Math.floor(probe) : -1)) {
         if (dir > 0) {
-          // land exactly on the obstacle row
           const obstacleRow = Math.floor(probe);
           this.y = obstacleRow - RIG.h / 2 - 0.01;
           this.grounded = true;
@@ -282,27 +317,20 @@ export class Rig {
     }
     if (st === "redfault") {
       if (f.heatProt < 1) this.hurt(2.6 * TICK_DT * 60, "heat");
-      // magma adjacency
       if (f.heatProt < 2) {
         const cx = Math.floor(this.x);
         const cy = Math.floor(this.y + 1);
         const w = this.world;
         for (const [dx, dy] of [[-1, 0], [1, 0], [0, 1], [0, -1], [0, 0]] as const) {
           const i = cx + dx + (cy + dy) * w.w;
-          if (w.liquid[i] === LIQ_MAGMA) {
-            this.hurt(14 * TICK_DT * 60, "magma");
-            break;
-          }
+          if (w.liquid[i] === LIQ_MAGMA) { this.hurt(14 * TICK_DT * 60, "magma"); break; }
         }
       }
     }
-    // fire contact
-    // (fires damage through events in GameSim)
   }
 
-  effectiveMaxHp(): number {
-    return this.assistMode ? this.maxHp * 2 : this.maxHp;
-  }
+  effectiveMaxHp(): number { return this.assistMode ? this.maxHp * 2 : this.maxHp; }
+  get overheated(): boolean { return this.overheatTimer > 0; }
 
   hurt(amount: number, cause: string) {
     if (this.dead) return;
@@ -318,35 +346,28 @@ export class Rig {
     }
   }
 
-  /** Emergency extraction: keep upgrades + world; drop 25% cargo as recoverable cache. */
   emergencyExtract(): { lost: number; dropped: [string, number][]; x: number; y: number } {
     const dropped: [string, number][] = [];
     let lost = 0;
     for (const [res, amount] of this.cargo) {
       const drop = Math.floor(amount * 0.25);
-      if (drop > 0) {
-        dropped.push([res, drop]);
-        lost += drop * (RESOURCES[res]?.value ?? 0);
-      }
+      if (drop > 0) { dropped.push([res, drop]); lost += drop * (RESOURCES[res]?.value ?? 0); }
       const keep = amount - drop;
-      if (keep <= 0) this.cargo.delete(res);
-      else this.cargo.set(res, keep);
+      if (keep <= 0) this.cargo.delete(res); else this.cargo.set(res, keep);
     }
-    const dx = this.x;
-    const dy = this.y;
-    // remaining cargo is lost (extraction fee), dropped share becomes a corpse-run cache
+    const dx = this.x; const dy = this.y;
     this.cargo.clear();
     this.dead = false;
     this.hp = this.effectiveMaxHp();
+    this.heat = 0;
+    this.overheatTimer = 0;
     this.x = BASE_X + 2;
     this.y = SURFACE_ROW - 3.2;
-    this.vx = 0;
-    this.vy = 0;
+    this.vx = 0; this.vy = 0;
     this.bus.emit({ type: "emergencyExtract" });
     return { lost, dropped, x: dx, y: dy };
   }
 
-  // ---- excavation -------------------------------------------------------------
   private digAt(ax: number, ay: number, tick: number) {
     const w = this.world;
     const td = tool(this.toolTier);
@@ -359,15 +380,20 @@ export class Rig {
     const reach = Math.min(dist, td.reach);
     const ix = this.x + (dx / (dist || 1)) * reach;
     const iy = this.y + (dy / (dist || 1)) * reach;
-    // first solid cell along the aim (including impact cell)
     const target = this.findImpact(this.x, this.y, ix, iy);
     if (!target) return;
     this.applyDig(target.x, target.y, td, tick);
     this.lastDugCell = target;
     this.digTicks++;
+    this.heat += td.heat.gen;
+    if (this.heat >= td.heat.overheatAt && this.overheatTimer <= 0) {
+      this.overheatTimer = 2.0;
+      this.bus.emit({ type: "overheat", tier: this.toolTier } as any);
+    }
+    this.lastRecoil = td.recoil;
+    this.bus.emit({ type: "digRecoil", recoil: td.recoil, tier: this.toolTier } as any);
   }
 
-  /** Walk the aim ray and return the first cell that stops the drill. */
   findImpact(sx: number, sy: number, ex: number, ey: number): { x: number; y: number } | null {
     const w = this.world;
     const steps = Math.max(1, Math.ceil(Math.hypot(ex - sx, ey - sy) * 3));
@@ -378,10 +404,7 @@ export class Rig {
       const cx = Math.floor(px);
       const cy = Math.floor(py);
       if (cy < 0) continue;
-      if (w.solid(cx, cy)) {
-        // liquid does not block; treat only tiles
-        return { x: cx, y: cy };
-      }
+      if (w.solid(cx, cy)) return { x: cx, y: cy };
     }
     return null;
   }
@@ -393,12 +416,10 @@ export class Rig {
     const d = mat(tile);
     const t = this.toolTier;
     if (tile === M.BEDROCK || d.tier > [0, 1, 2, 3, 4, 5, 6, 8][t]) {
-      // this tool cannot even scratch it
       this.bus.emit({ type: "blocked", x: cx, y: cy, mat: tile, toolTier: t });
       this.bus.emit({ type: "drillHit", x: cx, y: cy, mat: tile, effective: false, toolTier: t });
       return;
     }
-    // affinity scaling: drill class best on soft, impact on brittle, thermal on metal/structural...
     const affinity = affinityFor(td.cls, d.family);
     const dmg = td.dps * affinity * td.interval;
     w.addDamage(cx, cy, dmg);
@@ -407,71 +428,93 @@ export class Rig {
       const extra = shapeExtra(td, cx, cy, w, t, this);
       w.set(cx, cy, M.AIR);
       this.bus.emit({ type: "break", x: cx, y: cy, mat: tile, count: 1 });
-      // impact chaining: connected brittle material cracks with the Hammerhead
-      if (td.cls === "impact" && d.family === "brittle") {
-        this.chainCrack(cx, cy, tile);
+      if (td.specials.includes("mawScar") || t === 7) this.onAftermath?.(cx, cy, "mawScar", t);
+      else if (td.specials.includes("thermalScar")) this.onAftermath?.(cx, cy, "thermalScar", t);
+      else if (td.specials.includes("seismicScar") || td.cls === "seismic") this.onAftermath?.(cx, cy, "seismicScar", t);
+      if (td.cls === "impact" && d.family === "brittle") this.chainCrack(cx, cy, tile);
+      if (td.specials.includes("thermalIgnite") && (d.flammable || this.rng.chance(0.15))) {
+        for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]] as const) {
+          const nx = cx + dx; const ny = cy + dy;
+          const liq = w.liquid[nx + ny * w.w];
+          const gas = w.gas[nx + ny * w.w];
+          if (liq === 3 || gas >= 3) {
+            this.bus.emit({ type: "ignite", x: nx, y: ny });
+            this.onAftermath?.(nx, ny, liq === 3 ? "burnedOil" : "burnedGas", t);
+          }
+        }
       }
-      // THE MAW: its shockwave finishes anything the swing already cracked
+      if (td.specials.includes("rotaryClear")) {
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          const x = cx + dx; const y = cy + dy;
+          const tt = w.get(x, y);
+          if (tt === M.AIR || tt === M.BEDROCK) continue;
+          const dd = mat(tt);
+          if (dd.granular) {
+            w.set(x, y, M.AIR);
+            this.bus.emit({ type: "break", x, y, mat: tt, count: 1 });
+            this.onAftermath?.(x, y, "collapsed", t);
+          }
+        }
+      }
       if (td.cls === "maw") this.shockwaveFinish(cx, cy);
-      void extra;
-      void tick;
+      if (w.gasSeed[cx + cy * w.w] || w.gas[cx + cy * w.w] >= 6) {
+        const force = 18 + t * 3;
+        this.vx += (this.rng.range(-1, 1)) * force * 0.1;
+        this.vy -= force * 0.2;
+        this.bus.emit({ type: "pressureRelease", x: cx, y: cy, force } as any);
+        this.onAftermath?.(cx, cy, "pressureRelease", t);
+      }
+      void extra; void tick;
     }
   }
 
-  /** MAW shockwave: shattered-fringe cells within 2.5 cells collapse. */
   private shockwaveFinish(cx: number, cy: number) {
     const w = this.world;
     let collapsed = 0;
-    for (let dy = -2; dy <= 2; dy++) {
-      for (let dx = -2; dx <= 2; dx++) {
-        if (dx * dx + dy * dy > 6) continue;
-        const x = cx + dx;
-        const y = cy + dy;
-        const t = w.get(x, y);
-        if (t === M.AIR || t === M.BEDROCK) continue;
-        const d = mat(t);
-        if (d.tier > 8) continue;
-        if (w.damageOf(x, y) >= d.hp * 0.4) {
-          w.set(x, y, M.AIR);
-          collapsed++;
-          this.bus.emit({ type: "break", x, y, mat: t, count: 1, chain: true });
-        }
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+      if (dx*dx+dy*dy>6) continue;
+      const x = cx + dx; const y = cy + dy;
+      const t = w.get(x, y);
+      if (t === M.AIR || t === M.BEDROCK) continue;
+      const d = mat(t);
+      if (d.tier > 8) continue;
+      if (w.damageOf(x, y) >= d.hp * 0.4) {
+        w.set(x, y, M.AIR);
+        collapsed++;
+        this.bus.emit({ type: "break", x, y, mat: t, count: 1, chain: true });
+        this.onAftermath?.(x, y, "mawScar", this.toolTier);
       }
     }
-    if (collapsed >= 4) {
-      this.bus.emit({ type: "break", x: cx, y: cy, mat: M.AIR, count: collapsed, chain: true });
-    }
+    if (collapsed >= 4) this.bus.emit({ type: "break", x: cx, y: cy, mat: M.AIR, count: collapsed, chain: true });
   }
 
-  /** Hammerhead chain: connected brittle cells of the same material fracture. */
   chainCrack(cx: number, cy: number, tile: number) {
     const w = this.world;
     const maxChain = 12;
     let count = 0;
-    const stack = [[cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]];
-    while (stack.length > 0 && count < maxChain) {
-      const [x, y] = stack.pop()!;
-      if (w.get(x, y) !== tile) continue;
-      w.set(x, y, M.AIR);
+    const stack = [[cx+1,cy],[cx-1,cy],[cx,cy+1],[cx,cy-1]];
+    while (stack.length>0 && count<maxChain) {
+      const [x,y]=stack.pop()!;
+      if (w.get(x,y)!==tile) continue;
+      w.set(x,y,M.AIR);
       count++;
       this.bus.emit({ type: "break", x, y, mat: tile, count: 1 });
-      stack.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);
+      this.onAftermath?.(x,y,"collapsed",this.toolTier);
+      stack.push([x+1,y],[x-1,y],[x,y+1],[x,y-1]);
     }
-    if (count > 0) this.bus.emit({ type: "break", x: cx, y: cy, mat: tile, count });
+    if (count>0) this.bus.emit({ type: "break", x: cx, y: cy, mat: tile, count });
   }
 
   useUtility(ax: number, ay: number) {
     const td = tool(this.toolTier);
-    if (this.utilityCooldown > 0) return; // single gate: both input paths funnel here
+    if (this.utilityCooldown > 0) return;
     this.utilityCooldown = 0.8;
     if (td.utility === "charge") {
       if (this.charges <= 0) return;
       this.charges--;
-      return { charge: true, x: ax, y: ay }; // GameSim detonates (world effects)
+      return { charge: true, x: ax, y: ay };
     }
-    if (td.utility === "resonate") {
-      return { resonate: true, x: ax, y: ay };
-    }
+    if (td.utility === "resonate") return { resonate: true, x: ax, y: ay };
     return { scan: true, x: ax, y: ay };
   }
 
@@ -482,23 +525,17 @@ export class Rig {
     const bulkEach = def.bulk * f.cargoBulkMul;
     const free = f.cargoCap - this.cargoUsed(f.cargoBulkMul);
     const take = Math.min(amount, Math.floor(free / bulkEach));
-    if (take <= 0) {
-      this.bus.emit({ type: "cargoFull" });
-      return 0;
-    }
+    if (take <= 0) { this.bus.emit({ type: "cargoFull" }); return 0; }
     this.cargo.set(res, (this.cargo.get(res) ?? 0) + take);
     if (take < amount) this.bus.emit({ type: "cargoFull" });
-    this.bus.emit({ type: "pickup", res, amount: take, x: this.x, y: this.y });
-    // magnet streak: quick consecutive pickups widen vacuum briefly
+    this.bus.emit({ type: "pickup", res, amount: take, x: this.x, y: this.y } as any);
     const now = performance.now() / 1000;
-    if (now - this.lastPickupAt < 2.0) this.magnetStreak++;
-    else this.magnetStreak = 1;
+    if (now - this.lastPickupAt < 2.0) this.magnetStreak++; else this.magnetStreak = 1;
     this.lastPickupAt = now;
     this.magnetStreakTimer = 2.0;
     return take;
   }
 
-  /** Effective vacuum including magnet-streak bonus (decays in step). */
   effectiveVacuum(): number {
     const base = Math.max(this.fx().vacuum, tool(this.toolTier).vacuum);
     if (this.magnetStreak >= 5 && this.magnetStreakTimer > 0) return base + 1.5;
@@ -506,61 +543,46 @@ export class Rig {
   }
 }
 
-/** Per-class multiplier for shape (non-impact) cells: big machines sweep clean. */
 const SHAPE_FACTOR: Record<string, number> = {
   drill: 0.5, impact: 0.55, thermal: 0.55, seismic: 0.55,
   rotary: 0.9, resonator: 0.85, maw: 1.15,
 };
 
 function shapeExtra(td: ReturnType<typeof tool>, cx: number, cy: number, w: World, toolTier: number, rig: Rig) {
-  // multi-cell shapes hit neighbours on the same tick (drill width)
   let n = 0;
   const factor = SHAPE_FACTOR[td.cls] ?? 0.6;
   for (const [ox, oy] of td.shape) {
-    if (ox === 0 && oy === 0) continue;
-    const x = cx + ox;
-    const y = cy + oy;
-    const tile = w.get(x, y);
-    if (tile === M.AIR || tile === M.BEDROCK) continue;
+    if (ox===0 && oy===0) continue;
+    const x = cx+ox; const y = cy+oy;
+    const tile = w.get(x,y);
+    if (tile===M.AIR || tile===M.BEDROCK) continue;
     const d = mat(tile);
-    if (d.tier > [0, 1, 2, 3, 4, 5, 6, 8][toolTier]) continue;
+    if (d.tier > [0,1,2,3,4,5,6,8][toolTier]) continue;
     const dmg = td.dps * affinityFor(td.cls, d.family) * td.interval * factor;
-    w.addDamage(x, y, dmg);
+    w.addDamage(x,y,dmg);
     if (w.damage[x + y * w.w] >= d.hp) {
-      w.set(x, y, M.AIR);
+      w.set(x,y,M.AIR);
       rig.bus.emit({ type: "break", x, y, mat: tile, count: 1 });
+      rig.onAftermath?.(x,y,td.tier===7?"mawScar":"collapsed",td.tier);
       n++;
     }
   }
   return n;
 }
 
-/** Tool-class affinity per material family (feels right > simulates rock). */
 export function affinityFor(cls: string, family: string): number {
   switch (cls) {
-    case "drill":
-      return family === "soft" || family === "granular" || family === "organic" ? 1.25 :
-        family === "brittle" ? 0.8 : family === "metal" || family === "structural" ? 0.35 : 0.5;
-    case "impact":
-      return family === "brittle" ? 1.5 : family === "dense" ? 0.7 :
-        family === "soft" || family === "granular" ? 0.9 : family === "crystal" ? 0.4 : 0.45;
-    case "thermal":
-      return family === "metal" || family === "structural" || family === "machine" ? 1.35 :
-        family === "dense" ? 0.6 : family === "crystal" ? 0.35 : 0.8;
-    case "seismic":
-      return family === "brittle" || family === "dense" ? 1.1 : 0.7;
-    case "rotary":
-      return 1.0;
-    case "resonator":
-      return family === "crystal" ? 1.6 : family === "dense" ? 0.8 : 0.7;
-    case "maw":
-      return 1.15;
-    default:
-      return 1;
+    case "drill": return family==="soft"||family==="granular"||family==="organic"?1.25: family==="brittle"?0.8: family==="metal"||family==="structural"?0.35:0.5;
+    case "impact": return family==="brittle"?1.5: family==="dense"?0.7: family==="soft"||family==="granular"?0.9: family==="crystal"?0.4:0.45;
+    case "thermal": return family==="metal"||family==="structural"||family==="machine"?1.35: family==="dense"?0.6: family==="crystal"?0.35:0.8;
+    case "seismic": return family==="brittle"||family==="dense"?1.1:0.7;
+    case "rotary": return 1.0;
+    case "resonator": return family==="crystal"?1.6: family==="dense"?0.8:0.7;
+    case "maw": return 1.15;
+    default: return 1;
   }
 }
 
 import { UPGRADES } from "./tools";
-const UPGRADE_MAP = new Map<string, UpgradeDef>(UPGRADES.map((u) => [u.key, u]));
-
+const UPGRADE_MAP = new Map<string, UpgradeDef>(UPGRADES.map((u)=>[u.key,u]));
 export { TOOLS };

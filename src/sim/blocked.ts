@@ -50,21 +50,38 @@ export class BlockedSites {
     }
   }
 
-  /** After a new capability: re-evaluate markers, emit one summary event. */
+  /** After a new capability: re-evaluate markers, emit one summary event with details. */
   reevaluate(toolTier: number, extraBreakable?: (site: BlockedSite) => boolean): number {
     let count = 0;
+    const details: { x: number; y: number; mat: number; requiredTier: number }[] = [];
     for (const site of this.sites.values()) {
       if (!site.vulnerable && site.requiredTier <= toolTier) {
         site.vulnerable = true;
         count++;
+        details.push({ x: site.x, y: site.y, mat: site.mat, requiredTier: site.requiredTier });
       } else if (!site.vulnerable && extraBreakable?.(site)) {
         site.vulnerable = true;
         count++;
+        details.push({ x: site.x, y: site.y, mat: site.mat, requiredTier: site.requiredTier });
       }
     }
-    if (count > 0) this.bus.emit({ type: "nowVulnerable", count });
+    if (count > 0) this.bus.emit({ type: "nowVulnerable", count, details });
     this.lastAnnouncedTier = Math.max(this.lastAnnouncedTier, toolTier);
     return count;
+  }
+
+  /** Human-readable summary of what changed for UI */
+  vulnerableSummary(): string {
+    const vuln = [...this.sites.values()].filter((s) => s.vulnerable);
+    if (vuln.length === 0) return "No marked sites";
+    const byMat = new Map<number, number>();
+    for (const s of vuln) byMat.set(s.mat, (byMat.get(s.mat) ?? 0) + 1);
+    const parts: string[] = [];
+    for (const [matId, cnt] of byMat) {
+      const d = mat(matId);
+      parts.push(`${cnt}× ${d.name}`);
+    }
+    return parts.join(", ");
   }
 
   /** Sites that are newly vulnerable and not yet known-broken. */

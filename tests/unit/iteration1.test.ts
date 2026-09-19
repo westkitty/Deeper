@@ -100,14 +100,16 @@ describe("iteration-1: save v2", () => {
     const sim = new GameSim(1006);
     sim.rig.assistMode = true;
     sim.deathCaches.push({ x: 50, y: 60, cargo: [["gold", 7]] });
+    sim.aftermath.record(10, 10, "drained", 1);
     const data = sim.serialize();
-    expect(data.v).toBe(2);
+    expect(data.v).toBe(3);
     expect(data.assistMode).toBe(true);
     const sim2 = new GameSim(1006);
     sim2.load(data);
     expect(sim2.rig.assistMode).toBe(true);
     expect(sim2.deathCaches.length).toBe(1);
     expect(sim2.deathCaches[0].cargo).toEqual([["gold", 7]]);
+    expect(sim2.aftermath.entries.length).toBe(1);
   });
 });
 

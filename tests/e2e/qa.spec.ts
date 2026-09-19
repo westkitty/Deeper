@@ -6,18 +6,34 @@ async function start(page: Page) {
   await page.waitForFunction(() => (window as unknown as { deeper?: { scene?: unknown } }).deeper, null, { timeout: 30000 });
 }
 
+async function clickNewGame(page: Page) {
+  // Use JS click to avoid Playwright actionability hang when scene.restart() removes the button mid-click
+  await page.evaluate(() => {
+    const btn = [...document.querySelectorAll("button")].find(b => b.textContent?.includes("NEW GAME")) as HTMLButtonElement | undefined;
+    btn?.click();
+  });
+  await page.waitForTimeout(1500);
+}
+
+async function clickContinue(page: Page) {
+  await page.evaluate(() => {
+    const btn = [...document.querySelectorAll("button")].find(b => b.textContent?.includes("CONTINUE")) as HTMLButtonElement | undefined;
+    btn?.click();
+  });
+  await page.waitForTimeout(1200);
+}
+
 test("title screen shows and new game starts", async ({ page }) => {
   await start(page);
   await expect(page.locator(".title-panel")).toBeVisible();
   await expect(page.locator(".tagline")).toContainText("EVERYTHING EVENTUALLY BREAKS");
-  await page.getByRole("button", { name: "NEW GAME" }).click();
-  await page.waitForTimeout(1200);
+  await clickNewGame(page);
   await expect(page.locator("#hud-money")).toContainText("¤");
 });
 
 test("first dig breaks terrain, loot pickup and cargo respond", async ({ page }) => {
   await start(page);
-  await page.getByRole("button", { name: "NEW GAME" }).click();
+  await clickNewGame(page);
   await page.waitForTimeout(800);
   await page.evaluate(() => {
     const deeper = (window as unknown as { deeper: { sim: () => { rig: { x: number; y: number } } } }).deeper;
@@ -37,7 +53,7 @@ test("first dig breaks terrain, loot pickup and cargo respond", async ({ page })
 
 test("pause and settings open", async ({ page }) => {
   await start(page);
-  await page.getByRole("button", { name: "NEW GAME" }).click();
+  await clickNewGame(page);
   await page.waitForTimeout(500);
   await page.keyboard.press("Escape");
   await expect(page.getByRole("heading", { name: "PAUSED" })).toBeVisible();
@@ -48,7 +64,7 @@ test("pause and settings open", async ({ page }) => {
 
 test("map overlay opens with markers legend", async ({ page }) => {
   await start(page);
-  await page.getByRole("button", { name: "NEW GAME" }).click();
+  await clickNewGame(page);
   await page.waitForTimeout(500);
   await page.keyboard.press("m");
   await expect(page.locator(".map-panel")).toBeVisible();
@@ -58,7 +74,7 @@ test("map overlay opens with markers legend", async ({ page }) => {
 
 test("workshop sells and buys first upgrade", async ({ page }) => {
   await start(page);
-  await page.getByRole("button", { name: "NEW GAME" }).click();
+  await clickNewGame(page);
   await page.waitForTimeout(500);
   // grant resources deterministically via QA hook, then buy
   await page.evaluate(() => {
@@ -103,8 +119,7 @@ test("workshop sells and buys first upgrade", async ({ page }) => {
 
 test("save, reload, continue restores state", async ({ page }) => {
   await start(page);
-  await page.getByRole("button", { name: "NEW GAME" }).click();
-  await page.waitForTimeout(600);
+  await clickNewGame(page);
   await page.evaluate(() => {
     const deeper = (window as unknown as { deeper: { sim: () => { rig: { money: number } }; save: () => void } }).deeper;
     const sim = deeper.sim();
@@ -113,7 +128,7 @@ test("save, reload, continue restores state", async ({ page }) => {
   });
   await page.reload();
   await start(page);
-  await page.getByRole("button", { name: "CONTINUE" }).click();
+  await clickContinue(page);
   await page.waitForTimeout(800);
   const money = await page.evaluate(() => (window as unknown as { deeper: { state: () => { money: number } } }).deeper.state().money);
   expect(money).toBe(7777);
