@@ -366,19 +366,24 @@ export class EntityRenderer {
   }
 
   // FX spawners
-  spawnBreakDebris(cx: number, cy: number, matId: number, big = false) {
+  spawnBreakDebris(cx: number, cy: number, matId: number, big = false, aimAngle?: number) {
     if (this.reducedMotion && !big) return;
     const fam = mat(matId).family;
     const color = CHUNK_FAMILY_COLOR[fam] ?? 0x888888;
     const n = big ? 8 : 3;
+    const baseAng = aimAngle ?? 0;
     for (let i = 0; i < n; i++) {
       const frame = `vfx_chunk_${i % 3}`;
       const s = this.scene.add.image(cx * CELL + CELL / 2, cy * CELL + CELL / 2, "sheet_vfx", frame).setDepth(12);
       s.setTint(color).setScale(big ? 1.6 : 0.9 + Math.random() * 0.5);
-      this.particles.push({ s, vx: (Math.random() - 0.5) * (big ? 460 : 260), vy: -Math.random() * (big ? 380 : 240) - 40, life: 0.7 + Math.random() * 0.5, grav: 900, spin: (Math.random() - 0.5) * 10 });
+      const spread = (Math.random() - 0.5) * 1.2;
+      const ang = baseAng + Math.PI + spread;
+      const speed = big ? 200 + Math.random() * 260 : 120 + Math.random() * 140;
+      this.particles.push({ s, vx: Math.cos(ang) * speed + (Math.random() - 0.5) * 60, vy: Math.sin(ang) * speed - Math.random() * 120 - 40, life: 0.7 + Math.random() * 0.5, grav: 900, spin: (Math.random() - 0.5) * 10 });
     }
     const d = this.scene.add.image(cx * CELL + CELL / 2, cy * CELL + CELL / 2, "sheet_vfx", `vfx_dust_${Math.floor(Math.random() * 3)}`).setDepth(11).setAlpha(0.7);
-    this.particles.push({ s: d, vx: (Math.random() - 0.5) * 60, vy: -30, life: 0.6, grav: -20, spin: 0 });
+    const dustAng = baseAng + Math.PI;
+    this.particles.push({ s: d, vx: Math.cos(dustAng) * 40 + (Math.random() - 0.5) * 60, vy: Math.sin(dustAng) * 40 - 30, life: 0.6, grav: -20, spin: 0 });
     this.boundParticles();
   }
 
@@ -411,17 +416,21 @@ export class EntityRenderer {
   }
 
   spawnExplosion(x: number, y: number, scale: number) {
-    const spr = this.scene.add.image(x, y, "sheet_vfx", "vfx_ignite").setDepth(14).setBlendMode(Phaser.BlendModes.ADD).setScale(scale);
+    const spr = this.scene.add.image(x, y, "sheet_vfx", "vfx_ignite").setDepth(14).setBlendMode(Phaser.BlendModes.ADD).setScale(scale * 0.8);
+    this.scene.tweens.add({ targets: spr, scale: scale * 1.6, alpha: 0, duration: 420, ease: "Cubic.easeOut", onComplete: () => spr.destroy() });
+    const flash = this.scene.add.image(x, y, "sheet_vfx", "vfx_sparkle").setDepth(15).setBlendMode(Phaser.BlendModes.ADD).setScale(scale * 2).setTint(0xffe8a0).setAlpha(0.9);
+    this.scene.tweens.add({ targets: flash, scale: scale * 0.5, alpha: 0, duration: 220, onComplete: () => flash.destroy() });
     const seq = ["vfx_explosion_0", "vfx_explosion_1", "vfx_explosion_2", "vfx_explosion_3"];
     let f = -1;
     const ev = this.scene.time.addEvent({
       delay: 60, repeat: 4, callback: () => {
-        f++; if (f >= seq.length) { spr.destroy(); ev.remove(); } else spr.setFrame(seq[f]);
+        f++; if (f >= seq.length) { ev.remove(); } else spr.setFrame(seq[f]);
       },
     });
-    for (let i = 0; i < 10; i++) {
-      const s = this.scene.add.image(x, y, "sheet_vfx", `vfx_chunk_${i % 3}`).setDepth(13).setScale(1.5);
-      this.particles.push({ s, vx: Math.cos((i / 10) * Math.PI * 2) * 420, vy: Math.sin((i / 10) * Math.PI * 2) * 420 - 120, life: 0.9, grav: 800, spin: 8 });
+    for (let i = 0; i < 14; i++) {
+      const s = this.scene.add.image(x, y, "sheet_vfx", `vfx_chunk_${i % 3}`).setDepth(13).setScale(1.2 + Math.random() * 0.6);
+      const ang = (i / 14) * Math.PI * 2;
+      this.particles.push({ s, vx: Math.cos(ang) * (380 + scale * 60), vy: Math.sin(ang) * (380 + scale * 60) - 140, life: 0.9 + Math.random() * 0.2, grav: 780, spin: 8 + Math.random() * 4 });
     }
     this.boundParticles();
   }
@@ -444,36 +453,77 @@ export class EntityRenderer {
   // v1.2 new FX
   spawnRecoil(x: number, y: number, recoil: number) {
     if (this.reducedMotion) return;
-    const s = this.scene.add.image(x, y, "sheet_vfx", "vfx_dust_1").setDepth(12).setAlpha(0.6).setScale(0.5 + recoil);
-    this.particles.push({ s, vx: (Math.random() - 0.5) * 120, vy: -40 - recoil * 40, life: 0.3, grav: -10, spin: 2 });
+    const s = this.scene.add.image(x, y, "sheet_vfx", "vfx_dust_1").setDepth(12).setAlpha(0.65).setScale(0.5 + recoil * 0.8);
+    this.particles.push({ s, vx: (Math.random() - 0.5) * 120, vy: -40 - recoil * 50, life: 0.32, grav: -12, spin: 3 });
+    // tiny tool kick visual
+    if (this.toolSpr) {
+      this.scene.tweens.killTweensOf(this.toolSpr);
+      this.toolSpr.setScale(1.12);
+      this.scene.tweens.add({ targets: this.toolSpr, scale: 1, duration: 90, ease: "Back.easeOut" });
+    }
     this.boundParticles();
   }
 
   spawnHeavyLanding(x: number, y: number, tier: number) {
-    const ring = this.scene.add.image(x * CELL, y * CELL, "sheet_vfx", "vfx_scan_0").setDepth(13).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.7).setScale(1);
-    this.scene.tweens.add({ targets: ring, scale: 2 + tier, alpha: 0, duration: 400, onComplete: () => ring.destroy() });
-    for (let i = 0; i < 6 + tier; i++) {
+    // dust ring scaled by weight (Celeste landing feel)
+    const ring = this.scene.add.image(x * CELL, y * CELL + 12, "sheet_vfx", "vfx_scan_0").setDepth(13).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.75).setScale(0.8);
+    this.scene.tweens.add({ targets: ring, scale: 2.5 + tier * 0.9, alpha: 0, duration: this.reducedMotion ? 180 : 420, ease: "Cubic.easeOut", onComplete: () => ring.destroy() });
+    const dust = this.scene.add.image(x * CELL, y * CELL + 8, "sheet_vfx", "vfx_dust_2").setDepth(11).setAlpha(0.55).setScale(1.2 + tier * 0.3);
+    this.scene.tweens.add({ targets: dust, scale: 2.8 + tier * 0.6, alpha: 0, duration: 500, onComplete: () => dust.destroy() });
+    for (let i = 0; i < 6 + tier * 2; i++) {
       const s = this.scene.add.image(x * CELL, y * CELL, "sheet_vfx", `vfx_chunk_${i % 3}`).setDepth(12).setScale(0.8 + Math.random() * 0.6);
-      this.particles.push({ s, vx: (Math.random() - 0.5) * 300, vy: -Math.random() * 180, life: 0.6, grav: 600, spin: (Math.random() - 0.5) * 8 });
+      this.particles.push({ s, vx: (Math.random() - 0.5) * (300 + tier * 40), vy: -Math.random() * (180 + tier * 20), life: 0.6 + Math.random() * 0.2, grav: 650, spin: (Math.random() - 0.5) * 8 });
+    }
+    // chassis squish handled via tween on chassis image
+    if (!this.reducedMotion && this.chassis) {
+      this.scene.tweens.killTweensOf(this.chassis);
+      this.chassis.setScale(1.18, 0.82);
+      this.scene.tweens.add({ targets: this.chassis, scaleX: 0.92, scaleY: 1.12, duration: 70, yoyo: true, repeat: 1, ease: "Quad.easeOut", onComplete: () => { this.chassis.setScale(1, 1); } });
     }
     this.boundParticles();
   }
 
   spawnBreakthrough(x: number, y: number) {
-    const burst = this.scene.add.image(x * CELL, y * CELL, "sheet_vfx", "vfx_sparkle").setDepth(14).setBlendMode(Phaser.BlendModes.ADD).setScale(2);
-    this.scene.tweens.add({ targets: burst, scale: 4, alpha: 0, duration: 600, onComplete: () => burst.destroy() });
-    for (let i = 0; i < 10; i++) {
+    // double flash + ring (SteamWorld Dig 2 breakthrough feel)
+    const burst = this.scene.add.image(x * CELL, y * CELL, "sheet_vfx", "vfx_sparkle").setDepth(14).setBlendMode(Phaser.BlendModes.ADD).setScale(1.2);
+    this.scene.tweens.add({ targets: burst, scale: 5.5, alpha: 0, duration: this.reducedMotion ? 200 : 620, ease: "Cubic.easeOut", onComplete: () => burst.destroy() });
+    const ring = this.scene.add.image(x * CELL, y * CELL, "sheet_vfx", "vfx_scan_0").setDepth(13).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.9).setScale(0.5);
+    this.scene.tweens.add({ targets: ring, scale: 6, alpha: 0, duration: 560, onComplete: () => ring.destroy() });
+    const ring2 = this.scene.add.image(x * CELL, y * CELL, "sheet_vfx", "vfx_scan_1").setDepth(13).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.6).setScale(0.3);
+    this.scene.tweens.add({ targets: ring2, scale: 4.5, alpha: 0, duration: 400, delay: 80, onComplete: () => ring2.destroy() });
+    for (let i = 0; i < 14; i++) {
       const s = this.scene.add.image(x * CELL, y * CELL, "sheet_vfx", "vfx_shard").setDepth(13);
+      const ang = (i / 14) * Math.PI * 2 + Math.random() * 0.3;
+      const spd = 280 + Math.random() * 180;
+      this.particles.push({ s, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd - 60, life: 0.75 + Math.random() * 0.3, grav: 420, spin: 10 + Math.random() * 6 });
+    }
+    for (let i = 0; i < 6; i++) {
+      const s = this.scene.add.image(x * CELL, y * CELL, "sheet_vfx", `vfx_chunk_${i % 3}`).setDepth(12).setScale(1.1);
       const ang = Math.random() * Math.PI * 2;
-      this.particles.push({ s, vx: Math.cos(ang) * 360, vy: Math.sin(ang) * 360 - 60, life: 0.7, grav: 400, spin: 10 });
+      this.particles.push({ s, vx: Math.cos(ang) * 220, vy: Math.sin(ang) * 220 - 80, life: 0.6, grav: 700, spin: (Math.random() - 0.5) * 10 });
     }
     this.boundParticles();
   }
 
   spawnTierAcquire(x: number, y: number, tier: number) {
-    const colors = [0xd8a83c, 0xf8d048, 0xb070e8, 0x48c8b0];
-    const ring = this.scene.add.image(x, y, "sheet_vfx", "vfx_elite_aura").setDepth(14).setBlendMode(Phaser.BlendModes.ADD).setScale(0.5).setTint(colors[tier % colors.length]);
-    this.scene.tweens.add({ targets: ring, scale: 3 + tier * 0.4, alpha: 0, duration: 900, onComplete: () => ring.destroy() });
+    const colors = [0xd8a83c, 0xf8d048, 0xe8a0f0, 0x48c8f0, 0xb070e8, 0x48c8b0, 0xffd060, 0xff6080];
+    const col = colors[tier % colors.length];
+    const ring = this.scene.add.image(x, y, "sheet_vfx", "vfx_elite_aura").setDepth(14).setBlendMode(Phaser.BlendModes.ADD).setScale(0.5).setTint(col);
+    this.scene.tweens.add({ targets: ring, scale: 3.5 + tier * 0.5, alpha: 0, duration: this.reducedMotion ? 300 : 900, ease: "Cubic.easeOut", onComplete: () => ring.destroy() });
+    const ring2 = this.scene.add.image(x, y, "sheet_vfx", "vfx_scan_0").setDepth(13).setBlendMode(Phaser.BlendModes.ADD).setScale(0.3).setTint(col).setAlpha(0.8);
+    this.scene.tweens.add({ targets: ring2, scale: 2.5 + tier * 0.3, alpha: 0, duration: 600, delay: 120, onComplete: () => ring2.destroy() });
+    for (let i = 0; i < 8 + tier; i++) {
+      const s = this.scene.add.image(x, y, "sheet_vfx", "vfx_sparkle").setDepth(14).setBlendMode(Phaser.BlendModes.ADD).setTint(col).setScale(1.2);
+      const ang = (i / (8 + tier)) * Math.PI * 2;
+      const spd = 80 + tier * 20 + Math.random() * 60;
+      this.particles.push({ s, vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd - 30, life: 0.8, grav: -20, spin: 4 });
+    }
+    // flash chassis
+    if (this.chassis) {
+      this.chassis.setTint(col);
+      this.scene.time.delayedCall(220, () => this.chassis.clearTint());
+    }
+    this.boundParticles();
   }
 
   spawnDebrisBurst(x: number, y: number, mul: number) {
@@ -486,8 +536,16 @@ export class EntityRenderer {
   }
 
   spawnMagnetStreak(x: number, y: number) {
-    const s = this.scene.add.image(x, y, "sheet_vfx", "vfx_sparkle").setDepth(12).setBlendMode(Phaser.BlendModes.ADD).setScale(1.2);
-    this.particles.push({ s, vx: 0, vy: -80, life: 0.4, grav: -20, spin: 6 });
+    const count = this.sim.rig.magnetStreak;
+    const hue = count >= 10 ? 0xb070e8 : count >= 5 ? 0xf8d048 : 0x80e8ff;
+    for (let i = 0; i < (count >= 5 ? 2 : 1); i++) {
+      const s = this.scene.add.image(x + (Math.random() - 0.5) * 12, y + (Math.random() - 0.5) * 12, "sheet_vfx", "vfx_sparkle").setDepth(12).setBlendMode(Phaser.BlendModes.ADD).setScale(1.0 + Math.min(1.2, count * 0.12)).setTint(hue);
+      this.particles.push({ s, vx: (Math.random() - 0.5) * 40, vy: -90 - count * 6, life: 0.45 + count * 0.02, grav: -30, spin: 6 + count * 0.3 });
+    }
+    if (count >= 5 && !this.reducedMotion) {
+      const ring = this.scene.add.image(x, y, "sheet_vfx", "vfx_scan_0").setDepth(11).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.4).setScale(0.6).setTint(hue);
+      this.scene.tweens.add({ targets: ring, scale: 1.8, alpha: 0, duration: 300, onComplete: () => ring.destroy() });
+    }
   }
 
   spawnAftermathMark(x: number, y: number, kind: string) {
@@ -501,8 +559,12 @@ export class EntityRenderer {
 
   spawnHazardWarn(x: number, y: number, kind: string, severity: number) {
     const color = kind === "steam" ? 0x9ad0e8 : kind.includes("gas") ? 0x7ae88a : kind === "pressure" ? 0xe8d05a : 0xe86838;
-    const txt = this.scene.add.text(x * CELL, y * CELL - 12, `⚠ ${kind.toUpperCase()}`, { fontFamily: "monospace", fontSize: "12px", color: `#${color.toString(16).padStart(6, "0")}` }).setDepth(20).setOrigin(0.5);
-    this.hazardSprites.push({ s: txt as unknown as Phaser.GameObjects.Image, life: 1.2 + severity });
+    const txt = this.scene.add.text(x * CELL, y * CELL - 12, `⚠ ${kind.toUpperCase()}`, { fontFamily: "monospace", fontSize: "12px", color: `#${color.toString(16).padStart(6, "0")}`, stroke: "#000", strokeThickness: 3 }).setDepth(20).setOrigin(0.5);
+    this.hazardSprites.push({ s: txt as unknown as Phaser.GameObjects.Image, life: 1.4 + severity * 0.6 });
+    if (!this.reducedMotion) {
+      const warn = this.scene.add.image(x * CELL + CELL / 2, y * CELL + CELL / 2, "sheet_vfx", "vfx_telegraph").setDepth(19).setTint(color).setAlpha(0.7).setScale(1.2).setBlendMode(Phaser.BlendModes.ADD);
+      this.scene.tweens.add({ targets: warn, scale: 2.2, alpha: 0, duration: 600, onComplete: () => warn.destroy() });
+    }
   }
 
   spawnPressureRelease(x: number, y: number, force: number) {
@@ -525,11 +587,19 @@ export class EntityRenderer {
 
   spawnPickupBurst(x: number, y: number, res: string) {
     if (this.reducedMotion) return;
-    const s = this.scene.add.image(x, y, "sheet_vfx", "vfx_sparkle").setDepth(13).setBlendMode(Phaser.BlendModes.ADD);
     const resDef = RESOURCES[res];
-    const tint = resDef ? (resDef.tier >= 5 ? 0xb070e8 : resDef.tier >= 3 ? 0xf8d048 : 0xbfe8f0) : 0xffffff;
-    s.setTint(tint);
-    this.particles.push({ s, vx: (Math.random() - 0.5) * 80, vy: -120, life: 0.5, grav: -60, spin: 4 });
+    const tier = resDef?.tier ?? 1;
+    const tint = tier >= 5 ? 0xb070e8 : tier >= 3 ? 0xf8d048 : 0xbfe8f0;
+    const n = tier >= 5 ? 3 : tier >= 3 ? 2 : 1;
+    for (let i = 0; i < n; i++) {
+      const s = this.scene.add.image(x + (Math.random() - 0.5) * 10, y + (Math.random() - 0.5) * 10, "sheet_vfx", "vfx_sparkle").setDepth(13).setBlendMode(Phaser.BlendModes.ADD).setScale(0.8 + tier * 0.18);
+      s.setTint(tint);
+      this.particles.push({ s, vx: (Math.random() - 0.5) * 90, vy: -120 - tier * 12, life: 0.5 + tier * 0.06, grav: -60, spin: 4 + tier });
+    }
+    if (tier >= 4) {
+      const ring = this.scene.add.image(x, y, "sheet_vfx", "vfx_scan_0").setDepth(12).setBlendMode(Phaser.BlendModes.ADD).setTint(tint).setAlpha(0.5).setScale(0.4);
+      this.scene.tweens.add({ targets: ring, scale: 1.6, alpha: 0, duration: 380, onComplete: () => ring.destroy() });
+    }
     this.boundParticles();
   }
 }

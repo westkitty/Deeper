@@ -226,13 +226,40 @@ export class AudioEngine {
     };
   }
 
-  // Gamefeel cues
-  playRecoil(tier: number) { if (!this.reducedMotion) this.play("recoil", 0.35 + tier * 0.06, 0.9 + tier * 0.05); }
-  playLanding(impact: number) { this.play(impact > 30 ? "landing_heavy" : "recoil", Math.min(1, 0.3 + impact * 0.02), 0.9 + Math.random() * 0.1); }
-  playBreakthrough() { this.play("breakthrough", 0.8, 1); }
-  playTierAcquire(tier: number) { this.play("tier_acquire", 0.85, 0.9 + tier * 0.03); }
-  playDebris() { if (Math.random() < 0.5) this.play("debris", 0.3, 0.9 + Math.random() * 0.3); }
-  playMagnetStreak() { this.play("magnet_streak", 0.6, 1.0 + Math.random() * 0.2); }
+  // Gamefeel cues — enhanced with rising pitch & weight
+  playRecoil(tier: number) { if (!this.reducedMotion) this.play("recoil", 0.35 + tier * 0.07, 0.88 + tier * 0.06); }
+  playLanding(impact: number) {
+    const heavy = impact > 28;
+    this.play(heavy ? "landing_heavy" : "recoil", Math.min(1, 0.32 + impact * 0.022), heavy ? 0.92 + Math.random() * 0.08 : 0.9 + Math.random() * 0.12);
+    if (heavy && !this.reducedMotion) this.play("debris", 0.25, 0.8 + Math.random() * 0.2);
+  }
+  playBreakthrough(chainCount?: number) {
+    const pitch = chainCount ? 0.95 + Math.min(0.35, chainCount * 0.04) : 1;
+    const gain = chainCount ? 0.75 + Math.min(0.35, chainCount * 0.05) : 0.8;
+    this.play("breakthrough", gain, pitch);
+    if (chainCount && chainCount >= 6) this.play("wow_chain", 0.5, pitch * 0.9);
+  }
+  playTierAcquire(tier: number) {
+    // Dome Keeper tier identity — distinct pitch + sparkle
+    const rate = 0.82 + tier * 0.07;
+    this.play("tier_acquire", 0.85 + tier * 0.02, rate);
+    // extra shimmer for high tiers
+    if (tier >= 5) setTimeout(() => this.play("relic", 0.4, rate * 1.15), 120);
+  }
+  playDebris() { if (Math.random() < 0.55) this.play("debris", 0.32, 0.88 + Math.random() * 0.32); }
+  playMagnetStreak(streak?: number) {
+    const st = streak ?? 0;
+    const rate = 0.95 + Math.min(0.65, st * 0.08) + Math.random() * 0.08;
+    const gain = 0.5 + Math.min(0.4, st * 0.05);
+    this.play("magnet_streak", gain, rate);
+    if (st >= 5) setTimeout(() => this.play("pickup", 0.35, rate * 1.2), 60);
+  }
+  playChain(count: number) {
+    // Noita-style escalating chain feedback
+    if (count < 3) return;
+    const rate = 0.9 + Math.min(0.7, count * 0.06);
+    if (count % 2 === 0) this.play("debris", 0.25 + Math.min(0.3, count * 0.03), rate);
+  }
 
   // Hazard cues
   playHazard(kind: string, severity?: number) {

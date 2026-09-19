@@ -195,6 +195,9 @@ export class WorldScene extends Phaser.Scene {
           this.ui.toast({ text: `${tool(t).name} selected`, color: "#d8a83c" });
           this.audio.playTierAcquire(t);
           this.entities.spawnTierAcquire(this.sim.rig.x * CELL, this.sim.rig.y * CELL, t);
+          this.doHitStop(35 + t * 4);
+          this.doCameraKick(0, -1, 1 + t * 0.2);
+          this.addShake(1 + t * 0.3);
         }
       }
       if (k === "q") {
@@ -202,6 +205,9 @@ export class WorldScene extends Phaser.Scene {
         this.sim.rig.toolTier = next;
         this.ui.toast({ text: `${tool(next).name} selected`, color: "#d8a83c" });
         this.audio.playTierAcquire(next);
+        this.entities.spawnTierAcquire(this.sim.rig.x * CELL, this.sim.rig.y * CELL, next);
+        this.doHitStop(35 + next * 4);
+        this.doCameraKick(0, -1, 1 + next * 0.2);
       }
     });
   }
@@ -399,39 +405,92 @@ export class WorldScene extends Phaser.Scene {
   private closeSettings() { this.settingsOpen = false; this.ui.clearMenu(); if (!this.started) this.showTitle(); }
   private closeFinale() { this.finaleOpen = false; this.ui.clearMenu(); }
 
+  private hitStopMs = 0;
+  private hitStopDuration = 0;
+  private cameraKickX = 0;
+  private cameraKickY = 0;
+
+  private doHitStop(durationMs: number) {
+    if (this.audio.reducedMotion) return;
+    this.hitStopMs = durationMs;
+    this.hitStopDuration = durationMs;
+  }
+
+  private doCameraKick(ax: number, ay: number, strength: number) {
+    if (this.audio.reducedMotion) return;
+    const len = Math.hypot(ax, ay) || 1;
+    this.cameraKickX = (-ax / len) * strength;
+    this.cameraKickY = (-ay / len) * strength;
+  }
+
   private wireSimEvents() {
     this.sim.bus.on((e) => {
       switch (e.type) {
         case "drillHit": {
           const [wx, wy] = [e.x * CELL + CELL / 2, e.y * CELL + CELL / 2];
           if (e.effective) {
-            if (Math.random() < 0.5) this.entities.spawnSparks(wx, wy, 2);
+            const sparkN = 1 + Math.floor(this.sim.rig.toolTier / 2) + (Math.random() < 0.6 ? 1 : 0);
+            if (Math.random() < 0.6) this.entities.spawnSparks(wx, wy, sparkN);
             this.audio.digSound(mat(e.mat).sound, true, this.sim.rig.toolTier);
-            if (this.sim.rig.toolTier >= 2) this.entities.spawnRecoil(wx, wy, tool(this.sim.rig.toolTier).recoil * 0.3);
+            if (this.sim.rig.toolTier >= 2) this.entities.spawnRecoil(wx, wy, tool(this.sim.rig.toolTier).recoil * 0.32);
+            // micro kick on effective hit — Terraria-style, weighty
+            if (this.sim.rig.toolTier >= 1) this.doCameraKick(Math.cos(this.sim.rig.aimAngle), Math.sin(this.sim.rig.aimAngle), 0.7 + this.sim.rig.toolTier * 0.32);
           } else {
             this.audio.digSound(mat(e.mat).sound, false);
             this.entities.spawnSparks(wx, wy, 1);
+            this.addShake(1.4);
+            this.doCameraKick(Math.cos(this.sim.rig.aimAngle), Math.sin(this.sim.rig.aimAngle), 1.2);
           }
           break;
         }
         case "break": {
-          this.entities.spawnBreakDebris(e.x, e.y, e.mat, (e.count ?? 1) > 2);
+          const ang = this.sim.rig.aimAngle;
+          const cnt = e.count ?? 1;
+          this.entities.spawnBreakDebris(e.x, e.y, e.mat, cnt > 2, ang);
           this.audio.playDebris();
           if (e.chain) {
-            this.audio.play("wow_chain", 0.5, 0.9 + Math.random() * 0.2);
-            this.addShake(5);
-            this.ui.toast({ text: `CHAIN x${e.count} — collapse!`, color: "#e8a040" });
+            // escalating pitch with count — Noita chain feel
+            const pitch = 0.85 + Math.min(0.6, cnt * 0.045);
+            this.audio.play("wow_chain", 0.5 + Math.min(0.4, cnt * 0.04), pitch);
+            this.audio.playChain(cnt);
+            this.addShake(6 + cnt * 0.6);
+            this.ui.toast({ text: `CHAIN x${cnt} — collapse!`, color: "#e8a040" });
+            this.doHitStop(60 + Math.min(90, cnt * 7));
+            this.doCameraKick(Math.cos(ang), Math.sin(ang), 3.2 + cnt * 0.35);
+            // extra debris burst for big chains
+            if (cnt >= 6) this.entities.spawnDebrisBurst(e.x * CELL, e.y * CELL, Math.min(3, cnt / 3));
+          } else {
+            // small hitstop on single break — juice without breaking flow (Celeste-style)
+            if (cnt <= 2) this.doHitStop(18 + this.sim.rig.toolTier * 5);
           }
-          if ((e.count ?? 0) >= 4) {
+          if (cnt >= 4) {
             this.entities.spawnBreakthrough(e.x, e.y);
-            this.audio.playBreakthrough();
+            this.audio.playBreakthrough(cnt);
+            this.doHitStop(cnt >= 8 ? 130 : 90);
+            this.addShake(cnt >= 8 ? 14 : 10);
+            // breakthrough zoom punch (SteamWorld Dig 2)
+            if (!this.audio.reducedMotion) {
+              this.cameras.main.zoomTo(cnt >= 8 ? 1.12 : 1.08, 80);
+              this.time.delayedCall(120, () => this.cameras.main.zoomTo(1, cnt >= 8 ? 240 : 180));
+            }
+            if (cnt >= 6) {
+              this.ui.toast({ text: `BREAKTHROUGH x${cnt}!`, color: "#f8d048" });
+            }
           }
           break;
         }
         case "explode": {
           this.entities.spawnExplosion(e.x * CELL, e.y * CELL, e.radius * 0.6);
-          this.audio.play("explosion", 0.9);
-          this.addShake(e.big ? 14 : 7);
+          this.audio.play("explosion", e.big ? 1 : 0.9, e.big ? 0.88 : 1);
+          this.addShake(e.big ? 15 : 7);
+          if (e.big) {
+            this.doHitStop(70);
+            this.doCameraKick((Math.random() - 0.5), (Math.random() - 0.5), 5);
+            if (!this.audio.reducedMotion) {
+              this.cameras.main.zoomTo(1.06, 60);
+              this.time.delayedCall(100, () => this.cameras.main.zoomTo(1, 200));
+            }
+          }
           break;
         }
         case "steam": {
@@ -440,13 +499,28 @@ export class WorldScene extends Phaser.Scene {
           break;
         }
         case "ignite": {
-          this.audio.play("ignite", 0.5);
+          this.audio.play("ignite", 0.55);
+          this.addShake(3);
+          // brief orange flash (hazard telegraph payoff)
+          if (!this.audio.reducedMotion) {
+            const flash = this.add.graphics().setDepth(100).setScrollFactor(0);
+            flash.fillStyle(0xff6a2a, 0.18);
+            flash.fillRect(0, 0, this.scale.width, this.scale.height);
+            this.tweens.add({ targets: flash, alpha: 0, duration: 220, onComplete: () => flash.destroy() });
+          }
           break;
         }
         case "resonance": {
           this.entities.spawnResonanceWave(e.x * CELL, e.y * CELL);
-          this.audio.play("resonance", 0.85);
-          this.addShake(8);
+          const combo = this.sim.resonanceCombo;
+          const pitch = 0.9 + Math.min(0.6, combo * 0.12);
+          this.audio.play("resonance", 0.8 + Math.min(0.3, combo * 0.06), pitch);
+          this.addShake(7 + combo * 1.2);
+          if (combo >= 2) {
+            this.ui.toast({ text: `RESONANCE x${combo}!`, color: "#b0e8ff" });
+            this.doHitStop(30 + combo * 10);
+            this.doCameraKick(0, -1, 1.5 + combo * 0.4);
+          }
           break;
         }
         case "hurt": {
@@ -467,8 +541,15 @@ export class WorldScene extends Phaser.Scene {
           break;
         }
         case "sell": {
-          this.audio.play("sell");
+          // sell payoff — rising pitch with amount (Motherload)
+          const rate = 0.92 + Math.min(0.4, Math.log10(e.money + 10) * 0.12);
+          this.audio.play("sell", 0.9, rate);
           this.ui.toast({ text: `Sold cargo: +¤${e.money.toLocaleString()}`, color: "#d8a83c", icon: "money" });
+          this.doCameraKick(0, -1, 1.5);
+          if (e.money >= 1000) {
+            this.entities.spawnTierAcquire(this.sim.rig.x * CELL, this.sim.rig.y * CELL - 20, Math.min(7, Math.floor(Math.log10(e.money))));
+            this.addShake(2);
+          }
           break;
         }
         case "cargoFull": {
@@ -480,11 +561,18 @@ export class WorldScene extends Phaser.Scene {
           const rigPx = this.sim.rig.x * CELL;
           const rigPy = this.sim.rig.y * CELL;
           this.entities.spawnPickupBurst(rigPx, rigPy, e.res);
-          this.audio.play("pickup", 0.7, 0.9 + Math.random() * 0.2);
+          // rising pitch based on tier (Motherload juice)
+          const resDef = (e as any).res ? { tier: 1 } : null;
+          // actual tier from loot handled in entities, but audio pitch from streak + random
+          const streak = this.sim.rig.magnetStreak;
+          const baseRate = 0.88 + Math.min(0.5, streak * 0.06) + Math.random() * 0.12;
+          this.audio.play("pickup", 0.7 + Math.min(0.3, streak * 0.03), baseRate);
           if (e.vacuum) {
             this.entities.spawnMagnetStreak(rigPx, rigPy);
-            this.audio.playMagnetStreak();
+            this.audio.playMagnetStreak(streak);
           }
+          // micro kick on valuable pickup
+          if ((e as any).vacuum && streak >= 5) this.doCameraKick(Math.random() - 0.5, -1, 0.6 + streak * 0.08);
           break;
         }
         case "blocked": break;
@@ -553,7 +641,12 @@ export class WorldScene extends Phaser.Scene {
             this.ui.banner(b[0], b[1], 4600, "wow");
             this.audio.playWow(e.key);
             this.audio.play(b[2], 0.95);
-            this.addShake(8);
+            this.addShake(9);
+            this.doHitStop(80);
+            if (!this.audio.reducedMotion) {
+              this.cameras.main.zoomTo(1.06, 120);
+              this.time.delayedCall(200, () => this.cameras.main.zoomTo(1, 300));
+            }
           }
           if (e.key === "wow12_depth") {
             window.setTimeout(() => {
@@ -565,13 +658,25 @@ export class WorldScene extends Phaser.Scene {
           }
           break;
         }
-        case "threatDeath": { this.audio.play("dig_metal", 0.4, 0.8); break; }
+        case "threatDeath": {
+          this.audio.play("dig_metal", 0.45, 0.85 + Math.random() * 0.2);
+          this.doCameraKick((Math.random() - 0.5), (Math.random() - 0.5), 1.2);
+          this.doHitStop(18);
+          break;
+        }
         case "coreExtracted": { this.audio.play("discovery", 1); break; }
         case "overheat": {
           this.audio.playHazard("overheat", 1);
-          this.audio.play("overheat", 0.7);
+          this.audio.play("overheat", 0.75);
           this.ui.toast({ text: "OVERHEAT — cooling down", color: "#e85838", icon: "hazard" });
-          this.addShake(4);
+          this.addShake(5);
+          this.doCameraKick(0, -1, 2.5);
+          if (!this.audio.reducedMotion) {
+            const flash = this.add.graphics().setDepth(100).setScrollFactor(0);
+            flash.fillStyle(0xff3a2a, 0.22);
+            flash.fillRect(0, 0, this.scale.width, this.scale.height);
+            this.tweens.add({ targets: flash, alpha: 0, duration: 300, onComplete: () => flash.destroy() });
+          }
           break;
         }
         case "overheatEnd": { this.ui.toast({ text: "Heat nominal", color: "#48c8b0" }); break; }
@@ -584,8 +689,11 @@ export class WorldScene extends Phaser.Scene {
         case "heavyLanding": {
           this.entities.spawnHeavyLanding(e.x, e.y, e.tier);
           this.audio.playLanding(30 + e.tier * 5);
-          this.audio.play("landing_heavy", 0.5 + e.tier * 0.08);
-          this.addShake(2 + e.tier);
+          this.audio.play("landing_heavy", 0.5 + e.tier * 0.09);
+          this.addShake(2.5 + e.tier * 1.1);
+          this.doCameraKick(0, 1, 1.2 + e.tier * 0.5);
+          // extra squish already in entities, but add micro hitstop for weight (Celeste)
+          if (e.tier >= 4) this.doHitStop(30 + e.tier * 6);
           break;
         }
         case "landing": {
@@ -643,7 +751,24 @@ export class WorldScene extends Phaser.Scene {
   }
 
   override update(_time: number, delta: number) {
-    const dt = Math.min(0.05, delta / 1000);
+    // hitstop handling (Celeste/Hades freeze frames)
+    let dt = Math.min(0.05, delta / 1000);
+    const rawDelta = delta;
+    if (this.hitStopMs > 0) {
+      this.hitStopMs -= rawDelta;
+      // during hitstop, time is frozen — keep rendering but no sim
+      if (this.hitStopMs > 0) dt *= 0.02;
+      else this.hitStopMs = 0;
+    }
+    // camera kick decay (Deep Rock recoil feel)
+    if (this.cameraKickX !== 0 || this.cameraKickY !== 0) {
+      const decay = Math.pow(0.0008, dt);
+      this.cameraKickX *= decay;
+      this.cameraKickY *= decay;
+      if (Math.abs(this.cameraKickX) < 0.02) this.cameraKickX = 0;
+      if (Math.abs(this.cameraKickY) < 0.02) this.cameraKickY = 0;
+    }
+
     this.animTime += dt;
     this.frames++; this.fpsTime += dt;
     if (this.fpsTime >= 0.5) { this.fps = this.frames / this.fpsTime; this.frames = 0; this.fpsTime = 0; }
@@ -678,7 +803,9 @@ export class WorldScene extends Phaser.Scene {
       }
       this.utilPrev = this.input2.utilityPressed;
 
-      this.sim.step(dt);
+      // skip sim step during full freeze
+      const isFrozen = this.hitStopMs > 0 && this.hitStopDuration > 0 && this.hitStopMs > this.hitStopDuration * 0.35;
+      if (!isFrozen) this.sim.step(dt);
       const stNow = stratumAtRow(Math.floor(this.sim.rig.y));
       this.audio.setDepthTint(Math.min(1, this.sim.rig.y / 800));
       this.audio.setStratum(stNow);
@@ -692,6 +819,16 @@ export class WorldScene extends Phaser.Scene {
         const near = this.sim.threats.nearest(this.sim.rig.x, this.sim.rig.y, 10);
         if (near && near.elite) this.audio.play("threat_warn", 0.5);
         else if (near) this.audio.play("threat_warn", 0.25, 1.2);
+      }
+      // Spelunky-style threat telegraph reaction
+      for (const th of this.sim.threats.threats) {
+        if (th.telegraph > 0 && th.telegraph < 0.15) {
+          // just started telegraph
+          if (Math.abs(th.x - this.sim.rig.x) < 14 && Math.abs(th.y - this.sim.rig.y) < 14) {
+            this.addShake(th.elite ? 3 : 1.5);
+            if (th.elite) this.doCameraKick(th.x - this.sim.rig.x, th.y - this.sim.rig.y, 1.2);
+          }
+        }
       }
       if (this.sim.stats.scansPulsed !== this.lastScanCount) {
         this.lastScanCount = this.sim.stats.scansPulsed;
@@ -729,9 +866,11 @@ export class WorldScene extends Phaser.Scene {
     const cam = this.cameras.main;
     const rigPx = this.sim.rig.x * CELL;
     const rigPy = this.sim.rig.y * CELL;
+    const kickX = this.cameraKickX;
+    const kickY = this.cameraKickY;
     cam.centerOn(
-      Phaser.Math.Linear(cam.scrollX + cam.width / 2, rigPx + this.sim.rig.facing * 60, 0.08),
-      Phaser.Math.Linear(cam.scrollY + cam.height / 2, rigPy, 0.12),
+      Phaser.Math.Linear(cam.scrollX + cam.width / 2, rigPx + this.sim.rig.facing * 60 + kickX, 0.08),
+      Phaser.Math.Linear(cam.scrollY + cam.height / 2, rigPy + kickY, 0.12),
     );
     if (this.shakeAmount > 0.2) {
       cam.shake(80, this.shakeAmount * 0.0006);
